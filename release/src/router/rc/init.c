@@ -23802,6 +23802,56 @@ NO_USB_CAP:
 #if defined(RPAX58) || defined(RPBE58) || defined(RTBE58_GO)
 	nvram_set("apscan_counts", "0");
 #endif
+
+#if defined(GTBE98)
+	if (model == MODEL_GTBE98 && nvram_get_int("unrestrict_wl") == 1) {
+		/* Remove Wi-Fi regulatory restrictions: override country codes,
+		 * regulatory revisions, DFS exclusions and enable UNII-4.
+		 * Applied on every boot before wireless driver initialization. */
+		nvram_set("1:ccode", "#a");
+		nvram_set("1:regrev", "0");
+		nvram_set("2:ccode", "#a");
+		nvram_set("2:regrev", "0");
+		nvram_set("3:ccode", "#a");
+		nvram_set("3:regrev", "0");
+		nvram_set("4:ccode", "#a");
+		nvram_set("4:regrev", "0");
+		nvram_set("location_code", "#a");
+		nvram_set("territory_code", "US/02");
+		nvram_set("wl_country_code", "#a");
+		nvram_set("wl_country_rev", "0");
+		nvram_set("wl0_country_abbrev_override", "US");
+		nvram_set("wl0_country_code", "#a");
+		nvram_set("wl0_country_rev", "0");
+		nvram_set("wl1_country_abbrev_override", "US");
+		nvram_set("wl1_country_code", "#a");
+		nvram_set("wl1_country_rev", "0");
+		nvram_set("wl2_country_abbrev_override", "US");
+		nvram_set("wl2_country_code", "#a");
+		nvram_set("wl2_country_rev", "0");
+		nvram_set("wl3_country_abbrev_override", "US");
+		nvram_set("wl3_country_code", "#a");
+		nvram_set("wl3_country_rev", "0");
+		nvram_set("acs_dfs", "0");
+		nvram_set("wl_acs_dfs", "0");
+		nvram_set("wl_acs_excl_chans_dfs", "");
+		nvram_set("wl_acs_excl_chans", "");
+		nvram_set("wl0_acs_dfs", "0");
+		nvram_set("wl0_acs_excl_chans_base", "");
+		nvram_set("wl0_acs_excl_chans", "");
+		nvram_set("wl1_acs_dfs", "0");
+		nvram_set("wl1_acs_excl_chans_base", "");
+		nvram_set("wl1_acs_excl_chans", "");
+		nvram_set("wl2_acs_dfs", "0");
+		nvram_set("wl2_acs_excl_chans_base", "");
+		nvram_set("wl2_acs_excl_chans", "");
+		nvram_set("wl3_acs_dfs", "0");
+		nvram_set("wl3_acs_excl_chans_base", "");
+		nvram_set("wl3_acs_excl_chans", "");
+		nvram_set("acs_unii4", "1");
+	}
+#endif
+
 	return 0;
 } // end of init_nvram
 

@@ -22,7 +22,10 @@
 
 function initial() {
 	show_menu();
-	initConntrackValues()
+	initConntrackValues();
+	if (based_modelid == "GT-BE98") {
+		document.getElementById("unrestrict_wl_row").style.display = "";
+	}
 }
 
 function initConntrackValues(){
@@ -245,6 +248,13 @@ function applyRule(){
 						<td>
 							<input type="radio" name="dhcpd_send_wpad" class="input" value="1" <% nvram_match_x("", "dhcpd_send_wpad", "1", "checked"); %>><#checkbox_Yes#>
 							<input type="radio" name="dhcpd_send_wpad" class="input" value="0" <% nvram_match_x("", "dhcpd_send_wpad", "0", "checked"); %>><#checkbox_No#>
+						</td>
+					</tr>
+					<tr id="unrestrict_wl_row" style="display:none">
+						<th>Remove Wi-Fi regulatory restrictions (requires reboot)</th>
+						<td>
+							<input type="radio" name="unrestrict_wl" class="input" value="1" <% nvram_match_x("", "unrestrict_wl", "1", "checked"); %>><#checkbox_Yes#>
+							<input type="radio" name="unrestrict_wl" class="input" value="0" <% nvram_match_x("", "unrestrict_wl", "0", "checked"); %>><#checkbox_No#>
 						</td>
 					</tr>
 				</table>
