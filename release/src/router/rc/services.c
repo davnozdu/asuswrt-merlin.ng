@@ -13398,57 +13398,73 @@ start_services(void)
 	run_custom_script("services-start", 0, NULL, NULL);
 
 #if defined(GTBE98)
-	/* Apply Wi-Fi regulatory overrides at the very end of boot, only on
-	 * GT-BE98 when the user enabled the toggle and the override is not
-	 * already in effect. Running this here (after all services started)
-	 * means a bad override cannot stop the router from booting: LAN/SSH
-	 * stay reachable even if the wireless driver fails to restart. */
-	if (get_model() == MODEL_GTBE98
-	    && nvram_get_int("unrestrict_wl") == 1
-	    && !nvram_match("wl0_country_code", "#a")) {
-		nvram_set("1:ccode", "#a");
-		nvram_set("1:regrev", "0");
-		nvram_set("2:ccode", "#a");
-		nvram_set("2:regrev", "0");
-		nvram_set("3:ccode", "#a");
-		nvram_set("3:regrev", "0");
-		nvram_set("4:ccode", "#a");
-		nvram_set("4:regrev", "0");
-		nvram_set("location_code", "#a");
-		nvram_set("territory_code", "US/02");
-		nvram_set("wl_country_code", "#a");
-		nvram_set("wl_country_rev", "0");
-		nvram_set("wl0_country_abbrev_override", "US");
-		nvram_set("wl0_country_code", "#a");
-		nvram_set("wl0_country_rev", "0");
-		nvram_set("wl1_country_abbrev_override", "US");
-		nvram_set("wl1_country_code", "#a");
-		nvram_set("wl1_country_rev", "0");
-		nvram_set("wl2_country_abbrev_override", "US");
-		nvram_set("wl2_country_code", "#a");
-		nvram_set("wl2_country_rev", "0");
-		nvram_set("wl3_country_abbrev_override", "US");
-		nvram_set("wl3_country_code", "#a");
-		nvram_set("wl3_country_rev", "0");
-		nvram_set("acs_dfs", "0");
-		nvram_set("wl_acs_dfs", "0");
-		nvram_set("wl_acs_excl_chans_dfs", "");
-		nvram_set("wl_acs_excl_chans", "");
-		nvram_set("wl0_acs_dfs", "0");
-		nvram_set("wl0_acs_excl_chans_base", "");
-		nvram_set("wl0_acs_excl_chans", "");
-		nvram_set("wl1_acs_dfs", "0");
-		nvram_set("wl1_acs_excl_chans_base", "");
-		nvram_set("wl1_acs_excl_chans", "");
-		nvram_set("wl2_acs_dfs", "0");
-		nvram_set("wl2_acs_excl_chans_base", "");
-		nvram_set("wl2_acs_excl_chans", "");
-		nvram_set("wl3_acs_dfs", "0");
-		nvram_set("wl3_acs_excl_chans_base", "");
-		nvram_set("wl3_acs_excl_chans", "");
-		nvram_set("acs_unii4", "1");
-		nvram_commit();
-		notify_rc("restart_wireless");
+	/* Apply Wi-Fi regulatory overrides at the very end of boot, on GT-BE98
+	 * only when the user enabled the toggle. The hook runs on every boot;
+	 * each parameter is checked individually and only the ones that differ
+	 * from the expected value are rewritten (self-healing if ASUS init
+	 * resets any of them on a later boot). Wireless is restarted only when
+	 * at least one value actually changed, so there is no Wi-Fi flap when
+	 * everything is already in the desired state.
+	 *
+	 * Placing this after run_custom_script("services-start") keeps LAN/SSH
+	 * reachable even if restart_wireless fails on bad values: the toggle
+	 * can be turned off via the web UI or SSH instead of bricking the box. */
+	if (get_model() == MODEL_GTBE98 && nvram_get_int("unrestrict_wl") == 1) {
+		static const struct { const char *name; const char *value; } overrides[] = {
+			{ "1:ccode",                      "#a"    },
+			{ "1:regrev",                     "0"     },
+			{ "2:ccode",                      "#a"    },
+			{ "2:regrev",                     "0"     },
+			{ "3:ccode",                      "#a"    },
+			{ "3:regrev",                     "0"     },
+			{ "4:ccode",                      "#a"    },
+			{ "4:regrev",                     "0"     },
+			{ "location_code",                "#a"    },
+			{ "territory_code",               "US/02" },
+			{ "wl_country_code",              "#a"    },
+			{ "wl_country_rev",               "0"     },
+			{ "wl0_country_abbrev_override",  "US"    },
+			{ "wl0_country_code",             "#a"    },
+			{ "wl0_country_rev",              "0"     },
+			{ "wl1_country_abbrev_override",  "US"    },
+			{ "wl1_country_code",             "#a"    },
+			{ "wl1_country_rev",              "0"     },
+			{ "wl2_country_abbrev_override",  "US"    },
+			{ "wl2_country_code",             "#a"    },
+			{ "wl2_country_rev",              "0"     },
+			{ "wl3_country_abbrev_override",  "US"    },
+			{ "wl3_country_code",             "#a"    },
+			{ "wl3_country_rev",              "0"     },
+			{ "acs_dfs",                      "0"     },
+			{ "wl_acs_dfs",                   "0"     },
+			{ "wl_acs_excl_chans_dfs",        ""      },
+			{ "wl_acs_excl_chans",            ""      },
+			{ "wl0_acs_dfs",                  "0"     },
+			{ "wl0_acs_excl_chans_base",      ""      },
+			{ "wl0_acs_excl_chans",           ""      },
+			{ "wl1_acs_dfs",                  "0"     },
+			{ "wl1_acs_excl_chans_base",      ""      },
+			{ "wl1_acs_excl_chans",           ""      },
+			{ "wl2_acs_dfs",                  "0"     },
+			{ "wl2_acs_excl_chans_base",      ""      },
+			{ "wl2_acs_excl_chans",           ""      },
+			{ "wl3_acs_dfs",                  "0"     },
+			{ "wl3_acs_excl_chans_base",      ""      },
+			{ "wl3_acs_excl_chans",           ""      },
+			{ "acs_unii4",                    "1"     },
+		};
+		int changed = 0;
+		unsigned int i;
+		for (i = 0; i < sizeof(overrides) / sizeof(overrides[0]); i++) {
+			if (!nvram_match(overrides[i].name, overrides[i].value)) {
+				nvram_set(overrides[i].name, overrides[i].value);
+				changed = 1;
+			}
+		}
+		if (changed) {
+			nvram_commit();
+			notify_rc("restart_wireless");
+		}
 	}
 #endif
 
