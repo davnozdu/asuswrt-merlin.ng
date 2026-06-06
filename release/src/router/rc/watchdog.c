@@ -11881,6 +11881,14 @@ wdp:
 		start_ntpd();
 	}
 #endif
+#if RTCONFIG_NTPD
+	if (++ntpd_timer >= DAY_PERIOD) {
+		ntpd_timer = 0;
+		logmessage("ntpd", "Daily service restart");
+		stop_ntpd();
+		start_ntpd();
+	}
+#endif
 }
 
 #if ! (defined(RTCONFIG_QCA) || defined(RTCONFIG_RALINK))
