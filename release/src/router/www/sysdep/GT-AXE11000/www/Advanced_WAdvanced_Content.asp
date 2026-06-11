@@ -808,6 +808,8 @@ function initial(){
 	if(isSupport("sdn_mainfh")){
 		$(".mainBH").hide();
 	}
+
+	sr_init();
 }
 
 function wl_mode_change(mode){	
@@ -1235,13 +1237,57 @@ function register_event(){
 				document.getElementById('tx_power_desc').innerHTML = power_table_desc[ui.value-1];
 			},
 			stop:function(event, ui){
-				set_power(ui.value);	  
+				set_power(ui.value);
 			}
-		}); 
+		});
 
+	if(based_modelid == "GT-BE98"){
+		$( "#sr_slider" ).slider({
+			orientation: "horizontal",
+			range: "min",
+			min: 0,
+			max: 10,
+			value: sr_level_init,
+			slide:function(event, ui){
+				document.getElementById('sr_desc').innerHTML = sr_level_desc(ui.value);
+			}
+		});
+	}
 }
 
-function set_power(power_value){	
+/* GT-BE98 Spatial Reuse (OBSS-PD) tuning control */
+var sr_level_init = parseInt('<% nvram_get("wl_sr_level"); %>') || 0;
+var sr_before = '<% nvram_get("wl_sr_chanim_before"); %>';
+var sr_after  = '<% nvram_get("wl_sr_chanim_after"); %>';
+
+function sr_level_desc(v){
+	if(v <= 0) return "Off";
+	if(v <= 3) return "Conservative ("+v+")";
+	if(v <= 7) return "Balanced ("+v+")";
+	return "Aggressive ("+v+")";
+}
+
+function sr_init(){
+	if(based_modelid != "GT-BE98") return;
+	document.getElementById("wl_sr_field").style.display = "";
+	document.getElementById('sr_desc').innerHTML = sr_level_desc(sr_level_init);
+	if(sr_before != "" || sr_after != ""){
+		document.getElementById("sr_result").innerHTML =
+			"<b>Channel before:</b> " + (sr_before||"n/a") +
+			"<br><b>Channel after:</b> " + (sr_after||"n/a");
+	}
+}
+
+function submitSR(){
+	var v = $("#sr_slider").slider("value");
+	document.sr_form.wl_unit.value = wl_unit_value;
+	document.sr_form.wl_sr_level.value = v;
+	document.getElementById("sr_result").innerHTML = "Applying level " + v + " and measuring, please wait...";
+	document.sr_form.submit();
+	setTimeout(function(){ location.href = "/Advanced_WAdvanced_Content.asp"; }, 4500);
+}
+
+function set_power(power_value){
 	var power_table = [0, 25, 50, 88, 100];	
 	document.form.wl_txpower.value = power_table[power_value-1];
 }
@@ -2124,6 +2170,29 @@ function wifi7_mode(obj){
 						</td>
 					</tr>
 
+					<!-- GT-BE98: Spatial Reuse (OBSS-PD) live tuning -->
+					<tr id="wl_sr_field" style="display:none">
+						<th><a class="hintstyle" href="javascript:void(0);" onClick="alert('Spatial Reuse (OBSS-PD): raises the carrier-detect threshold so the radio transmits over weak neighbouring Wi-Fi, improving airtime in a congested area. Off = standard. Higher = more aggressive. Applies live without dropping clients; the before/after channel utilisation is shown below. Revert by setting Off.');">Spatial Reuse (OBSS-PD)</a></th>
+						<td>
+							<div>
+								<table>
+									<tr>
+										<td style="border:0px;padding-left:0px;">
+											<div id="sr_slider" style="width:120px;"></div>
+										</td>
+										<td style="border:0px;width:120px;">
+											<div id="sr_desc" style="font-size:14px;"></div>
+										</td>
+										<td style="border:0px;">
+											<input type="button" class="button_gen" onclick="submitSR();" value="Apply &amp; Test">
+										</td>
+									</tr>
+								</table>
+							</div>
+							<div id="sr_result" style="margin-top:6px;font-size:13px;"></div>
+						</td>
+					</tr>
+
 					<!--QCA9984 platform only, e.g. BRT-AC828 -->
 					<tr>
 						<th><#WLANConfig11b_x_Hardware_Offloading#></th>
@@ -2159,5 +2228,15 @@ function wifi7_mode(obj){
 	</tr>
 </table>
 <div id="footer"></div>
+
+<!-- GT-BE98 Spatial Reuse: dedicated apply form (live, no restart_wireless) -->
+<form method="post" name="sr_form" action="/start_apply.htm" target="hidden_frame">
+	<input type="hidden" name="current_page" value="Advanced_WAdvanced_Content.asp">
+	<input type="hidden" name="action_mode" value="apply">
+	<input type="hidden" name="action_script" value="spatial_reuse">
+	<input type="hidden" name="action_wait" value="5">
+	<input type="hidden" name="wl_unit" value="">
+	<input type="hidden" name="wl_sr_level" value="">
+</form>
 </body>
 </html>
