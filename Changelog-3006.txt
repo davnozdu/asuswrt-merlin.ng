@@ -2,6 +2,13 @@ Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
 3006.102.8_alpha2-dav1 (xx-Jun-2026)
+  - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
+         Wireless > Professional page.  Raises the carrier-detect
+         threshold so the radio transmits over weak neighbouring
+         Wi-Fi (better airtime in a congested area).  Applies live
+         via "wl sr_config" without restarting wireless / dropping
+         clients, and shows the channel utilisation before/after.
+         Off restores the default behaviour.
   - NEW: GT-BE98 "Remove Wi-Fi regulatory restrictions" toggle
          (Tools > Other Settings) now also unlocks the DFS sub-band
          (5G channels 52-144), UNII-4 (5G 149-177) and 2.4G channels

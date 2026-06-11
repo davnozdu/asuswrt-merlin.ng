@@ -15757,6 +15757,122 @@ retry_prepare_cert_in_etc:
 }
 #endif	/* RTCONFIG_HTTPS */
 
+#if defined(GTBE98)
+/* GT-BE98 Spatial Reuse (OBSS-PD) tuning.
+ *
+ * Reads the per-radio aggressiveness level wlX_sr_level (0..10) set from the
+ * Professional Wireless web page and applies it live via "wl sr_config", with
+ * no restart_wireless (so connected clients are not dropped). The level maps
+ * to a single OBSS-PD packet-detect threshold:
+ *
+ *     level 0  -> Spatial Reuse advanced OFF (sr_config=0, thresholds reset)
+ *     level N  -> T = -82 + N*2 dBm, clamped to the [-82,-62] dBm spec range,
+ *                 applied to srg_pdmin/pdmax and nsrg_pdmin/pdmax.
+ *
+ * For each radio a chanim_stats snapshot (txop/busy/glitch) is captured before
+ * and ~2s after applying, into wlX_sr_chanim_before / wlX_sr_chanim_after, so
+ * the web page can show the before/after effect. */
+static void
+sr_get_chanim(const char *ifname, char *out, size_t outsz)
+{
+	FILE *fp;
+	char cmd[64], line[256], chspec[24];
+	int tx, inbss, obss, nocat, nopkt, doze, txop, goodtx, badtx, glitch, badplcp, knoise, idle, busy;
+
+	if (outsz)
+		out[0] = '\0';
+	snprintf(cmd, sizeof(cmd), "wl -i %s chanim_stats", ifname);
+	fp = popen(cmd, "r");
+	if (fp == NULL)
+		return;
+	while (fgets(line, sizeof(line), fp)) {
+		/* the single data row starts with the chanspec and has 14 ints */
+		if (sscanf(line, "%23s %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+			chspec, &tx, &inbss, &obss, &nocat, &nopkt, &doze, &txop,
+			&goodtx, &badtx, &glitch, &badplcp, &knoise, &idle, &busy) == 15) {
+			snprintf(out, outsz, "txop=%d busy=%d glitch=%d", txop, busy, glitch);
+			break;
+		}
+	}
+	pclose(fp);
+}
+
+void
+apply_spatial_reuse(void)
+{
+	char wl_ifnames[64], word[64], *next;
+	char prefix[] = "wlXXXXXXXXXX_";
+	char tmp[64], snap[64], val[8];
+	int unit;
+
+	if (get_model() != MODEL_GTBE98)
+		return;
+
+	strlcpy(wl_ifnames, nvram_safe_get("wl_ifnames"), sizeof(wl_ifnames));
+	foreach (word, wl_ifnames, next) {
+		int level, t;
+
+		if (wl_ioctl(word, WLC_GET_INSTANCE, &unit, sizeof(unit)))
+			continue;
+		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
+
+		level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
+		if (level < 0) level = 0;
+		if (level > 10) level = 10;
+
+		/* snapshot "before" */
+		sr_get_chanim(word, snap, sizeof(snap));
+		nvram_set(strcat_r(prefix, "sr_chanim_before", tmp), snap);
+
+		if (level > 0) {
+			t = -82 + level * 2;	/* map 1..10 -> -80..-62 dBm */
+			if (t < -82) t = -82;
+			if (t > -62) t = -62;
+			snprintf(val, sizeof(val), "%d", t);
+			/* Persist to nvram so the watchdog's bsc_sr_check() reapplies
+			 * the thresholds after a reboot (sr_config=1 gates that block);
+			 * also apply live now for immediate feedback without a Wi-Fi
+			 * restart. */
+			nvram_set(strcat_r(prefix, "sr_config", tmp), "1");
+			nvram_set(strcat_r(prefix, "srg_pdmin", tmp), val);
+			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), val);
+			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), val);
+			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), val);
+			eval("wl", "-i", word, "sr_config", "srg_pdmin", val);
+			eval("wl", "-i", word, "sr_config", "srg_pdmax", val);
+			eval("wl", "-i", word, "sr_config", "nsrg_pdmin", val);
+			eval("wl", "-i", word, "sr_config", "nsrg_pdmax", val);
+		} else {
+			/* OFF: disable advanced SR, clear persisted thresholds (so the
+			 * watchdog leaves the radio alone) and restore the driver
+			 * defaults live. */
+			nvram_set(strcat_r(prefix, "sr_config", tmp), "0");
+			nvram_set(strcat_r(prefix, "srg_pdmin", tmp), "");
+			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), "");
+			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), "");
+			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), "");
+			eval("wl", "-i", word, "sr_config", "srg_pdmin", "-82");
+			eval("wl", "-i", word, "sr_config", "srg_pdmax", "-62");
+			eval("wl", "-i", word, "sr_config", "nsrg_pdmin", "-82");
+			eval("wl", "-i", word, "sr_config", "nsrg_pdmax", "-62");
+		}
+	}
+
+	sleep(2);
+
+	/* snapshot "after" */
+	strlcpy(wl_ifnames, nvram_safe_get("wl_ifnames"), sizeof(wl_ifnames));
+	foreach (word, wl_ifnames, next) {
+		if (wl_ioctl(word, WLC_GET_INSTANCE, &unit, sizeof(unit)))
+			continue;
+		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
+		sr_get_chanim(word, snap, sizeof(snap));
+		nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
+	}
+	nvram_commit();
+}
+#endif	/* GTBE98 */
+
 void handle_notifications(void)
 {
 	char nv[256], nvtmp[32], *cmd[8], *script;
@@ -17981,6 +18097,11 @@ check_ddr_done:
 			set_wltxpower();
 	}
 #endif
+#endif
+#if defined(GTBE98)
+	else if (strcmp(script, "spatial_reuse") == 0) {
+		apply_spatial_reuse();
+	}
 #endif
 #ifdef RTCONFIG_FANCTRL
 	else if (strcmp(script, "fanctrl") == 0) {

@@ -1233,6 +1233,9 @@ extern int set_mlo_config();
 #if defined(RTCONFIG_HND_ROUTER_BE_4916)
 extern void mlo_rescue_war();
 #endif
+#if defined(GTBE98)
+extern void apply_spatial_reuse(void);
+#endif
 #endif
 #if defined(RTCONFIG_MULTISERVICE_WAN)
 typedef struct {
