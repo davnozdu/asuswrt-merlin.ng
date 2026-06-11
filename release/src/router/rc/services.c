@@ -15800,28 +15800,28 @@ sr_get_chanim(const char *ifname, char *out, size_t outsz)
 void
 apply_spatial_reuse(void)
 {
-	char wl_ifnames[64], word[64], *next;
 	char prefix[] = "wlXXXXXXXXXX_";
-	char tmp[64], snap[64], val[8];
-	int unit;
+	char tmp[64], ifname[16], snap[64], val[8];
+	int unit, max_unit;
 
 	if (get_model() != MODEL_GTBE98)
 		return;
 
-	strlcpy(wl_ifnames, nvram_safe_get("wl_ifnames"), sizeof(wl_ifnames));
-	foreach (word, wl_ifnames, next) {
+	max_unit = num_of_wl_if();
+	for (unit = 0; unit < max_unit; unit++) {
 		int level, t;
 
-		if (wl_ioctl(word, WLC_GET_INSTANCE, &unit, sizeof(unit)))
-			continue;
 		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
+		strlcpy(ifname, nvram_safe_get(strcat_r(prefix, "ifname", tmp)), sizeof(ifname));
+		if (!*ifname)
+			continue;
 
 		level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
 		if (level < 0) level = 0;
 		if (level > 10) level = 10;
 
 		/* snapshot "before" */
-		sr_get_chanim(word, snap, sizeof(snap));
+		sr_get_chanim(ifname, snap, sizeof(snap));
 		nvram_set(strcat_r(prefix, "sr_chanim_before", tmp), snap);
 
 		if (level > 0) {
@@ -15838,10 +15838,10 @@ apply_spatial_reuse(void)
 			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), val);
 			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), val);
 			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), val);
-			eval("wl", "-i", word, "sr_config", "srg_pdmin", val);
-			eval("wl", "-i", word, "sr_config", "srg_pdmax", val);
-			eval("wl", "-i", word, "sr_config", "nsrg_pdmin", val);
-			eval("wl", "-i", word, "sr_config", "nsrg_pdmax", val);
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmin", val);
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmax", val);
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmin", val);
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmax", val);
 		} else {
 			/* OFF: disable advanced SR, clear persisted thresholds (so the
 			 * watchdog leaves the radio alone) and restore the driver
@@ -15851,22 +15851,22 @@ apply_spatial_reuse(void)
 			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), "");
 			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), "");
 			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), "");
-			eval("wl", "-i", word, "sr_config", "srg_pdmin", "-82");
-			eval("wl", "-i", word, "sr_config", "srg_pdmax", "-62");
-			eval("wl", "-i", word, "sr_config", "nsrg_pdmin", "-82");
-			eval("wl", "-i", word, "sr_config", "nsrg_pdmax", "-62");
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmin", "-82");
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmax", "-62");
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmin", "-82");
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmax", "-62");
 		}
 	}
 
 	sleep(2);
 
 	/* snapshot "after" */
-	strlcpy(wl_ifnames, nvram_safe_get("wl_ifnames"), sizeof(wl_ifnames));
-	foreach (word, wl_ifnames, next) {
-		if (wl_ioctl(word, WLC_GET_INSTANCE, &unit, sizeof(unit)))
-			continue;
+	for (unit = 0; unit < max_unit; unit++) {
 		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
-		sr_get_chanim(word, snap, sizeof(snap));
+		strlcpy(ifname, nvram_safe_get(strcat_r(prefix, "ifname", tmp)), sizeof(ifname));
+		if (!*ifname)
+			continue;
+		sr_get_chanim(ifname, snap, sizeof(snap));
 		nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
 	}
 	nvram_commit();
