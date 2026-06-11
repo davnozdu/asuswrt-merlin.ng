@@ -13435,23 +13435,24 @@ start_services(void)
 			{ "wl3_country_abbrev_override",  "US"    },
 			{ "wl3_country_code",             "#a"    },
 			{ "wl3_country_rev",              "0"     },
-			{ "acs_dfs",                      "0"     },
-			{ "wl_acs_dfs",                   "0"     },
-			{ "wl_acs_excl_chans_dfs",        ""      },
-			{ "wl_acs_excl_chans",            ""      },
-			{ "wl0_acs_dfs",                  "0"     },
-			{ "wl0_acs_excl_chans_base",      ""      },
-			{ "wl0_acs_excl_chans",           ""      },
-			{ "wl1_acs_dfs",                  "0"     },
-			{ "wl1_acs_excl_chans_base",      ""      },
-			{ "wl1_acs_excl_chans",           ""      },
-			{ "wl2_acs_dfs",                  "0"     },
-			{ "wl2_acs_excl_chans_base",      ""      },
-			{ "wl2_acs_excl_chans",           ""      },
-			{ "wl3_acs_dfs",                  "0"     },
-			{ "wl3_acs_excl_chans_base",      ""      },
-			{ "wl3_acs_excl_chans",           ""      },
+			/* Open the DFS sub-band (5G channels 52-144) to the auto
+			 * channel selector. With ccode=#a the radar restrictions are
+			 * already lifted, so these channels - usually the cleanest in
+			 * a crowded RF environment - are safe to use. set_acs_ifnames()
+			 * rebuilds wlX_acs_excl_chans from these flags on every
+			 * restart_wireless, so the exclusion lists are driven entirely
+			 * by acs_dfs/acs_band3/acs_ch13/acs_unii4 - there is no point
+			 * clearing wlX_acs_excl_chans* here (they would be overwritten). */
+			{ "acs_dfs",                      "1"     },
+			{ "wl_acs_dfs",                   "1"     },
+			{ "wl0_acs_dfs",                  "1"     },
+			{ "wl1_acs_dfs",                  "1"     },
+			{ "wl2_acs_dfs",                  "1"     },
+			{ "wl3_acs_dfs",                  "1"     },
+			/* Allow UNII-4 (5G ch 149-177) for auto channel selection. */
 			{ "acs_unii4",                    "1"     },
+			/* Allow 2.4G channels 12/13 - frequently empty in dense areas. */
+			{ "acs_ch13",                     "1"     },
 		};
 		int changed = 0;
 		unsigned int i;

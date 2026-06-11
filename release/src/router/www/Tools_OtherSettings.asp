@@ -251,7 +251,7 @@ function applyRule(){
 						</td>
 					</tr>
 					<tr id="unrestrict_wl_row" style="display:none">
-						<th>Remove Wi-Fi regulatory restrictions (requires reboot)</th>
+						<th>Remove Wi-Fi regulatory restrictions: unlock channels, DFS (5G 52-144), UNII-4, 2.4G ch 12/13 (requires reboot)</th>
 						<td>
 							<input type="radio" name="unrestrict_wl" class="input" value="1" <% nvram_match_x("", "unrestrict_wl", "1", "checked"); %>><#checkbox_Yes#>
 							<input type="radio" name="unrestrict_wl" class="input" value="0" <% nvram_match_x("", "unrestrict_wl", "0", "checked"); %>><#checkbox_No#>
