@@ -10,15 +10,15 @@ Asuswrt-Merlin 3006.xxx Changelog
          clients, and shows the channel utilisation before/after.
          Off restores the default behaviour.
   - NEW: GT-BE98 "Remove Wi-Fi regulatory restrictions" toggle
-         (Tools > Other Settings) now also unlocks the DFS sub-band
-         (5G channels 52-144), UNII-4 (5G 149-177) and 2.4G channels
-         12/13 for auto channel selection, giving the ACS engine the
-         cleanest channels in a congested RF environment.  Requires a
-         reboot, and is reverted by turning the toggle off.
-  - CHANGED: Reworked the unrestrict_wl override table - the previous
-             acs_dfs=0 forced the channel selector to skip every DFS
-             channel, and the wlX_acs_excl_chans clears were dead code
-             (rebuilt by set_acs_ifnames() on each restart_wireless).
+         (Tools > Other Settings) now also unlocks UNII-4 (5G 149-177)
+         and 2.4G channels 12/13 for auto channel selection, giving the
+         ACS engine the cleanest channels in a congested RF environment.
+         Requires a reboot, and is reverted by turning the toggle off.
+  - CHANGED: Cleaned up the unrestrict_wl override table - dropped the
+             ineffective acs_dfs writes (the flag is re-derived from
+             reg_mode on each wireless restart, and DFS is already usable
+             via reg_mode=h + the ccode override) and the dead
+             wlX_acs_excl_chans clears (rebuilt by set_acs_ifnames()).
   - FIXED: wget build failure with aclocal-1.17 (touch autotools
            stamps before configure).  Backported from gnuton.
   - UPDATED: Merged userspace updates from Asuswrt-Merlin main

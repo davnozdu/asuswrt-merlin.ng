@@ -13435,20 +13435,12 @@ start_services(void)
 			{ "wl3_country_abbrev_override",  "US"    },
 			{ "wl3_country_code",             "#a"    },
 			{ "wl3_country_rev",              "0"     },
-			/* Open the DFS sub-band (5G channels 52-144) to the auto
-			 * channel selector. With ccode=#a the radar restrictions are
-			 * already lifted, so these channels - usually the cleanest in
-			 * a crowded RF environment - are safe to use. set_acs_ifnames()
-			 * rebuilds wlX_acs_excl_chans from these flags on every
-			 * restart_wireless, so the exclusion lists are driven entirely
-			 * by acs_dfs/acs_band3/acs_ch13/acs_unii4 - there is no point
-			 * clearing wlX_acs_excl_chans* here (they would be overwritten). */
-			{ "acs_dfs",                      "1"     },
-			{ "wl_acs_dfs",                   "1"     },
-			{ "wl0_acs_dfs",                  "1"     },
-			{ "wl1_acs_dfs",                  "1"     },
-			{ "wl2_acs_dfs",                  "1"     },
-			{ "wl3_acs_dfs",                  "1"     },
+			/* DFS (5G ch 52-144) is already usable on this box: reg_mode=h
+			 * plus the ccode=#a override leaves the acs exclusion lists
+			 * empty, and the channels in use are pinned via wlX_chanspec.
+			 * The acsd-managed acs_dfs flag is re-derived from reg_mode on
+			 * every wireless restart, so forcing it here had no lasting
+			 * effect - intentionally not set. */
 			/* Allow UNII-4 (5G ch 149-177) for auto channel selection. */
 			{ "acs_unii4",                    "1"     },
 			/* Allow 2.4G channels 12/13 - frequently empty in dense areas. */
