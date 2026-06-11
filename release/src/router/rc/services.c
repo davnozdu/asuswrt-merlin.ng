@@ -1741,6 +1741,21 @@ void start_dnsmasq(void)
 		fprintf(fp, "interface-name=norton.local,%s\n", lan_ifname);
 #endif /* __CONFIG_NORTON__ */
 
+#if defined(GTBE98)
+	if (nvram_match("ctrld_enable", "1") && get_model() == MODEL_GTBE98) {
+		/* Control D (ctrld) is the sole DNS upstream: forward everything to
+		 * the local ctrld listener, ignore WAN/ISP DNS (no-resolv, no
+		 * servers-file) and let ctrld handle caching (cache-size=0). */
+		fprintf(fp, "no-resolv\n"
+			    "server=127.0.0.1#5354\n"
+			    "no-poll\n"
+			    "no-negcache\n"
+			    "cache-size=0\n"
+			    "min-port=%u\n",
+			nvram_get_int("dns_minport") ? : 4096);
+	} else
+#endif
+	{
 	fprintf(fp, is_routing_enabled() ?
 		"no-resolv\n" :			// no resolv, use only additional list
 		"resolv-file=%s\n", dmresolv);	// the real stuff is here
@@ -1750,6 +1765,7 @@ void start_dnsmasq(void)
 		    "cache-size=%u\n"		// dns cache size
 		    "min-port=%u\n",		// min port used for random src port
 		dmservers, 1500, nvram_get_int("dns_minport") ? : 4096);
+	}
 
 	fprintf(fp, "addn-hosts=/etc/hosts\n");
 
@@ -13473,6 +13489,11 @@ start_services(void)
 			}
 		}
 	}
+
+	/* Start Control D (ctrld) LAST - after every other service has started -
+	 * and only if the user opted in. It is gated and backgrounded, so a
+	 * failure here can never block boot or brick the router. */
+	start_ctrld();
 #endif
 
 	return 0;
@@ -15950,6 +15971,69 @@ apply_spatial_reuse(void)
 
 	nvram_commit();
 }
+
+/* GT-BE98 Control D (ctrld) DNS forwarder - opt-in user overlay.
+ *
+ * The arm64 ctrld binary is baked into the read-only rootfs (/usr/sbin/ctrld,
+ * never /jffs). It runs as a plain local forwarder on 127.0.0.1:5354 - WITHOUT
+ * the --iface flag, so ctrld does not touch dnsmasq or write to /jffs (its
+ * router integration only runs when --iface is set). The firmware itself points
+ * dnsmasq at the listener (see start_dnsmasq). The resolver UID is stored in
+ * nvram and the actual DNS policy lives in the Control D cloud admin.
+ *
+ * Everything is launched in the background and gated by ctrld_enable (default
+ * off), so a ctrld failure can never block boot or brick the router. */
+void
+stop_ctrld(void)
+{
+	if (get_model() != MODEL_GTBE98)
+		return;
+	if (pids("ctrld"))
+		killall_tk("ctrld");
+	eval("cru", "d", "ctrld_watch");
+	/* Restore the native DoT setting we changed on start, if any. */
+	if (nvram_get("ctrld_dnspriv_save") != NULL) {
+		nvram_set("dnspriv_enable", nvram_safe_get("ctrld_dnspriv_save"));
+		nvram_unset("ctrld_dnspriv_save");
+		nvram_commit();
+	}
+}
+
+void
+start_ctrld(void)
+{
+	char cmd[256];
+	char uid[80];
+
+	if (get_model() != MODEL_GTBE98)
+		return;
+	/* copy out of the shared nvram buffer before any other nvram call */
+	strlcpy(uid, nvram_safe_get("ctrld_uid"), sizeof(uid));
+	if (nvram_get_int("ctrld_enable") != 1 || *uid == '\0' || !f_exists("/usr/sbin/ctrld"))
+		return;
+
+	if (pids("ctrld"))
+		killall_tk("ctrld");
+
+	/* Control D brings its own encrypted upstream, so turn off Merlin's
+	 * native DNS-over-TLS while ctrld is active (saved for restore on stop). */
+	if (!nvram_match("dnspriv_enable", "0")) {
+		nvram_set("ctrld_dnspriv_save", nvram_safe_get("dnspriv_enable"));
+		nvram_set("dnspriv_enable", "0");
+		nvram_commit();
+	}
+
+	/* Plain forwarder, no --iface (so no dnsmasq/jffs changes by ctrld),
+	 * backgrounded so it can never block boot. */
+	snprintf(cmd, sizeof(cmd),
+		"/usr/sbin/ctrld run --cd %s --listen 127.0.0.1:5354 --homedir /tmp "
+		"--config /tmp/ctrld.toml --log /tmp/ctrld.log >/dev/null 2>&1 &",
+		uid);
+	system(cmd);
+
+	/* Respawn watchdog (every 3 min) in case ctrld dies. */
+	eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
+}
 #endif	/* GTBE98 */
 
 void handle_notifications(void)
@@ -18180,6 +18264,18 @@ check_ddr_done:
 #if defined(GTBE98)
 	else if (strcmp(script, "spatial_reuse") == 0) {
 		apply_spatial_reuse();
+	}
+	else if (strcmp(script, "ctrld") == 0) {
+		if (nvram_get_int("ctrld_enable") == 1)
+			start_ctrld();
+		else
+			stop_ctrld();
+		restart_dnsmasq(0);
+	}
+	else if (strcmp(script, "ctrld_check") == 0) {
+		/* respawn watchdog: restart ctrld if it is enabled but not running */
+		if (nvram_get_int("ctrld_enable") == 1 && !pids("ctrld"))
+			start_ctrld();
 	}
 #endif
 #ifdef RTCONFIG_FANCTRL

@@ -3125,6 +3125,24 @@ function get_default_wan_name(){
 			</td>
 		</tr>
 		</table>
+		<!-- GT-BE98: Control D (ctrld) DNS forwarder - opt-in overlay -->
+		<table id="ctrld_section" width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" style="display:none;margin-top:8px;">
+			<thead><tr><td colspan="2">Control D (ctrld)</td></tr></thead>
+			<tr>
+				<th width="30%">Enable Control D</th>
+				<td><input type="checkbox" id="ctrld_enable_chk"></td>
+			</tr>
+			<tr>
+				<th>Resolver ID</th>
+				<td>
+					<input type="text" id="ctrld_uid_inp" class="input_25_table" maxlength="64" value="" autocorrect="off" autocapitalize="off" placeholder="e.g. i7ieznru33">
+					<input type="button" class="button_gen" onclick="submitCtrld();" value="Apply Control D">
+					<br><span style="color:#FFCC00;font-size:12px;">Routes all DNS through Control D (your admin-panel policy). WAN DNS is bypassed and native DoT is turned off; disable DNS Director so it applies to every client. Starts last at boot, off by default.</span>
+					<div id="ctrld_status" style="margin-top:4px;font-size:12px;"></div>
+				</td>
+			</tr>
+		</table>
+
 		<div class="apply_gen" style="height:auto">
 			<input class="button_gen" id="apply_btn" onclick="applyRule();" type="button" value="<#CTL_apply#>"/>
 		</div>
@@ -3152,6 +3170,39 @@ function get_default_wan_name(){
 </table>
 
 <div id="footer"></div>
+
+<!-- GT-BE98 Control D: dedicated apply form (separate from the WAN form) -->
+<form method="post" name="ctrld_form" action="/start_apply.htm" target="hidden_frame">
+	<input type="hidden" name="current_page" value="Advanced_WAN_Content.asp">
+	<input type="hidden" name="action_mode" value="apply">
+	<input type="hidden" name="action_script" value="ctrld">
+	<input type="hidden" name="action_wait" value="5">
+	<input type="hidden" name="ctrld_enable" value="">
+	<input type="hidden" name="ctrld_uid" value="">
+</form>
+<script>
+function ctrld_init(){
+	if(typeof based_modelid === "undefined" || based_modelid != "GT-BE98") return;
+	var sec = document.getElementById("ctrld_section");
+	if(!sec) return;
+	sec.style.display = "";
+	var en = ('<% nvram_get("ctrld_enable"); %>' == "1");
+	document.getElementById("ctrld_enable_chk").checked = en;
+	document.getElementById("ctrld_uid_inp").value = '<% nvram_get("ctrld_uid"); %>';
+	document.getElementById("ctrld_status").innerHTML = en ? "Status: enabled" : "Status: disabled";
+}
+function submitCtrld(){
+	var en = document.getElementById("ctrld_enable_chk").checked;
+	var uid = document.getElementById("ctrld_uid_inp").value.replace(/[^A-Za-z0-9]/g,'');
+	if(en && uid == ""){ alert("Enter your Control D Resolver ID first."); return; }
+	document.ctrld_form.ctrld_enable.value = en ? "1" : "0";
+	document.ctrld_form.ctrld_uid.value = uid;
+	document.getElementById("ctrld_status").innerHTML = en ? "Applying and starting Control D, please wait..." : "Stopping Control D...";
+	document.ctrld_form.submit();
+	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 6000);
+}
+if(window.addEventListener) window.addEventListener("load", ctrld_init, false);
+</script>
 
 </body>
 </html>

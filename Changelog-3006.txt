@@ -2,6 +2,17 @@ Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
 3006.102.8_alpha2-dav1 (xx-Jun-2026)
+  - NEW: GT-BE98 built-in Control D (ctrld) DNS forwarder (WAN >
+         Control D).  The arm64 ctrld binary (v1.5.2, MIT) is baked
+         into the read-only rootfs - never /jffs - and survives factory
+         reset and firmware upgrades.  Enter your resolver ID, tick
+         Enable, Apply: ctrld runs as a local forwarder on 127.0.0.1:5354
+         (no --iface, so it never touches dnsmasq/jffs itself) and the
+         firmware points dnsmasq at it, disables native DoT and bypasses
+         WAN DNS while active.  Off by default; starts LAST at boot,
+         backgrounded and gated, so it can never block boot/brick the
+         router, with a 3-minute respawn watchdog.  Update by re-baking
+         a newer binary and rebuilding.
   - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
          Wireless > Professional page.  Raises the carrier-detect
          threshold so the radio transmits over weak neighbouring

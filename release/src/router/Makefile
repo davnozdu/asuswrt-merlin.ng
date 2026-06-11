@@ -2541,6 +2541,13 @@ ifeq ($(BRCM_CHIP),$(filter $(BRCM_CHIP),4908 4912))
 	install -D $(TOOLCHAIN_64)/aarch64-buildroot-linux-gnu/sysroot/lib/libnss_files.so.2 $(INSTALLDIR)/lib/aarch64/libnss_files.so.2
 endif
 
+# GT-BE98: bake in the Control D (ctrld) DNS forwarder - prebuilt static arm64
+# binary, baked into the read-only rootfs (never /jffs). MIT licensed.
+ifeq ($(HND_ROUTER_BE_4916),y)
+	install -D $(TOP)/ctrld/prebuilt/ctrld $(INSTALLDIR)/usr/sbin/ctrld
+	chmod 755 $(INSTALLDIR)/usr/sbin/ctrld
+endif
+
 #ifeq ($(RTCONFIG_CFEZ),y)
 	#install -D $(TOP_PLATFORM)/envram_bin/envram$(BCMEX)$(EX7)/envrams $(INSTALLDIR)/usr/sbin/envrams
 	#install -D $(TOP_PLATFORM)/envram_bin/envram$(BCMEX)$(EX7)/envram $(INSTALLDIR)/usr/sbin/envram

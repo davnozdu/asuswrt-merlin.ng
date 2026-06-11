@@ -1235,6 +1235,8 @@ extern void mlo_rescue_war();
 #endif
 #if defined(GTBE98)
 extern void apply_spatial_reuse(void);
+extern void start_ctrld(void);
+extern void stop_ctrld(void);
 #endif
 #endif
 #if defined(RTCONFIG_MULTISERVICE_WAN)
