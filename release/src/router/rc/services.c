@@ -13459,6 +13459,20 @@ start_services(void)
 			notify_rc("restart_wireless");
 		}
 	}
+
+	/* Re-install the Spatial Reuse autotune cron at boot when any radio has
+	 * auto mode enabled, so the 15-minute tuner survives reboots. */
+	{
+		int u, n = num_of_wl_if();
+		char p[16], t2[32];
+		for (u = 0; u < n; u++) {
+			snprintf(p, sizeof(p), "wl%d_", u);
+			if (nvram_get_int(strcat_r(p, "sr_auto", t2)) == 1) {
+				eval("cru", "a", "sr_autotune", "*/15 * * * * rc rc_service spatial_reuse");
+				break;
+			}
+		}
+	}
 #endif
 
 	return 0;
@@ -15764,29 +15778,79 @@ retry_prepare_cert_in_etc:
  * For each radio a chanim_stats snapshot (txop/busy/glitch) is captured before
  * and ~2s after applying, into wlX_sr_chanim_before / wlX_sr_chanim_after, so
  * the web page can show the before/after effect. */
-static void
-sr_get_chanim(const char *ifname, char *out, size_t outsz)
+static int
+sr_read_chanim(const char *ifname, int *txop, int *busy, int *glitch, int *obss)
 {
 	FILE *fp;
 	char cmd[64], line[256], chspec[24];
-	int tx, inbss, obss, nocat, nopkt, doze, txop, goodtx, badtx, glitch, badplcp, knoise, idle, busy;
+	int tx, inbss, ob, nocat, nopkt, doze, to, goodtx, badtx, gl, badplcp, knoise, idle, bu;
+	int ok = -1;
 
-	if (outsz)
-		out[0] = '\0';
 	snprintf(cmd, sizeof(cmd), "wl -i %s chanim_stats", ifname);
 	fp = popen(cmd, "r");
 	if (fp == NULL)
-		return;
+		return -1;
 	while (fgets(line, sizeof(line), fp)) {
 		/* the single data row starts with the chanspec and has 14 ints */
 		if (sscanf(line, "%23s %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
-			chspec, &tx, &inbss, &obss, &nocat, &nopkt, &doze, &txop,
-			&goodtx, &badtx, &glitch, &badplcp, &knoise, &idle, &busy) == 15) {
-			snprintf(out, outsz, "txop=%d busy=%d glitch=%d", txop, busy, glitch);
+			chspec, &tx, &inbss, &ob, &nocat, &nopkt, &doze, &to,
+			&goodtx, &badtx, &gl, &badplcp, &knoise, &idle, &bu) == 15) {
+			if (txop)   *txop = to;
+			if (busy)   *busy = bu;
+			if (glitch) *glitch = gl;
+			if (obss)   *obss = ob;
+			ok = 0;
 			break;
 		}
 	}
 	pclose(fp);
+	return ok;
+}
+
+static void
+sr_get_chanim(const char *ifname, char *out, size_t outsz)
+{
+	int txop = 0, busy = 0, glitch = 0;
+
+	if (outsz)
+		out[0] = '\0';
+	if (sr_read_chanim(ifname, &txop, &busy, &glitch, NULL) == 0)
+		snprintf(out, outsz, "txop=%d busy=%d glitch=%d", txop, busy, glitch);
+}
+
+/* Auto mode: pick an OBSS-PD aggressiveness level from the measured air.
+ * Spatial Reuse only helps when neighbouring BSS traffic (OBSS) actually
+ * occupies airtime, so the level is driven by the OBSS percentage from
+ * chanim_stats. A 2-level deadband avoids flapping; the level is capped at
+ * 6 (threshold -70 dBm) so auto mode never gets aggressive enough to risk
+ * ignoring the router's own clients. Returns the new level and fills a
+ * human-readable status string for the web UI. */
+static int
+sr_compute_auto_level(const char *ifname, int cur_level, char *status, size_t ssz)
+{
+	int txop = 0, busy = 0, glitch = 0, obss = 0, target, d, new_level;
+
+	if (sr_read_chanim(ifname, &txop, &busy, &glitch, &obss) != 0) {
+		snprintf(status, ssz, "Auto: no data");
+		return cur_level;
+	}
+
+	if (obss < 8)        target = 0;
+	else if (obss < 15)  target = 2;
+	else if (obss < 25)  target = 3;
+	else if (obss < 35)  target = 4;
+	else if (obss < 50)  target = 5;
+	else                 target = 6;
+
+	d = (target > cur_level) ? (target - cur_level) : (cur_level - target);
+	new_level = cur_level;
+	if (target == 0 || d >= 2)	/* deadband 2, but always allow turning off */
+		new_level = target;
+	if (new_level < 0) new_level = 0;
+	if (new_level > 10) new_level = 10;
+
+	snprintf(status, ssz, "Auto: level %d (OBSS %d%%, busy %d%%)", new_level, obss, busy);
+	return new_level;
 }
 
 void
@@ -15794,7 +15858,7 @@ apply_spatial_reuse(void)
 {
 	char prefix[] = "wlXXXXXXXXXX_";
 	char tmp[64], ifname[16], snap[64], val[8];
-	int unit, max_unit;
+	int unit, max_unit, any_auto = 0;
 
 	if (get_model() != MODEL_GTBE98)
 		return;
@@ -15808,7 +15872,22 @@ apply_spatial_reuse(void)
 		if (!*ifname)
 			continue;
 
-		level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
+		if (nvram_get_int(strcat_r(prefix, "sr_auto", tmp)) == 1) {
+			/* Auto mode: derive the level from the measured air and store
+			 * both the chosen level and a status string for the web UI. */
+			char status[96], lvlbuf[8];
+
+			any_auto = 1;
+			level = sr_compute_auto_level(ifname,
+				nvram_get_int(strcat_r(prefix, "sr_level", tmp)),
+				status, sizeof(status));
+			snprintf(lvlbuf, sizeof(lvlbuf), "%d", level);
+			nvram_set(strcat_r(prefix, "sr_level", tmp), lvlbuf);
+			nvram_set(strcat_r(prefix, "sr_auto_status", tmp), status);
+		} else {
+			level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
+			nvram_set(strcat_r(prefix, "sr_auto_status", tmp), "");
+		}
 		if (level < 0) level = 0;
 		if (level > 10) level = 10;
 
@@ -15861,6 +15940,14 @@ apply_spatial_reuse(void)
 		sr_get_chanim(ifname, snap, sizeof(snap));
 		nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
 	}
+
+	/* Install or remove the 15-minute autotune cron job depending on whether
+	 * any radio currently has auto mode enabled. */
+	if (any_auto)
+		eval("cru", "a", "sr_autotune", "*/15 * * * * rc rc_service spatial_reuse");
+	else
+		eval("cru", "d", "sr_autotune");
+
 	nvram_commit();
 }
 #endif	/* GTBE98 */

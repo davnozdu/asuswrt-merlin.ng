@@ -1257,6 +1257,8 @@ function register_event(){
 
 /* GT-BE98 Spatial Reuse (OBSS-PD) tuning control */
 var sr_level_init = parseInt('<% nvram_get("wl_sr_level"); %>') || 0;
+var sr_auto_init = parseInt('<% nvram_get("wl_sr_auto"); %>') || 0;
+var sr_auto_status = '<% nvram_get("wl_sr_auto_status"); %>';
 var sr_before = '<% nvram_get("wl_sr_chanim_before"); %>';
 var sr_after  = '<% nvram_get("wl_sr_chanim_after"); %>';
 
@@ -1267,10 +1269,24 @@ function sr_level_desc(v){
 	return "Aggressive ("+v+")";
 }
 
+/* Auto checkbox: when ticked, the slider is disabled and the row shows the
+ * status produced by the on-router 15-minute autotune scan instead. */
+function srAutoToggle(){
+	var on = document.getElementById('sr_auto_chk').checked;
+	if(on){
+		$("#sr_slider").slider("disable");
+		document.getElementById('sr_desc').innerHTML = sr_auto_status || "Auto (waiting for first scan)";
+	} else {
+		$("#sr_slider").slider("enable");
+		document.getElementById('sr_desc').innerHTML = sr_level_desc($("#sr_slider").slider("value"));
+	}
+}
+
 function sr_init(){
 	if(based_modelid != "GT-BE98") return;
 	document.getElementById("wl_sr_field").style.display = "";
-	document.getElementById('sr_desc').innerHTML = sr_level_desc(sr_level_init);
+	document.getElementById('sr_auto_chk').checked = (sr_auto_init == 1);
+	srAutoToggle();
 	if(sr_before != "" || sr_after != ""){
 		document.getElementById("sr_result").innerHTML =
 			"<b>Channel before:</b> " + (sr_before||"n/a") +
@@ -1279,10 +1295,13 @@ function sr_init(){
 }
 
 function submitSR(){
-	var v = $("#sr_slider").slider("value");
+	var auto = document.getElementById('sr_auto_chk').checked;
 	document.sr_form.wl_unit.value = wl_unit_value;
-	document.sr_form.wl_sr_level.value = v;
-	document.getElementById("sr_result").innerHTML = "Applying level " + v + " and measuring, please wait...";
+	document.sr_form.wl_sr_auto.value = auto ? 1 : 0;
+	document.sr_form.wl_sr_level.value = auto ? sr_level_init : $("#sr_slider").slider("value");
+	document.getElementById("sr_result").innerHTML = auto
+		? "Enabling Auto and scanning the air, please wait..."
+		: "Applying level " + document.sr_form.wl_sr_level.value + " and measuring, please wait...";
 	document.sr_form.submit();
 	setTimeout(function(){ location.href = "/Advanced_WAdvanced_Content.asp"; }, 4500);
 }
@@ -2172,7 +2191,7 @@ function wifi7_mode(obj){
 
 					<!-- GT-BE98: Spatial Reuse (OBSS-PD) live tuning -->
 					<tr id="wl_sr_field" style="display:none">
-						<th><a class="hintstyle" href="javascript:void(0);" onClick="alert('Spatial Reuse (OBSS-PD): raises the carrier-detect threshold so the radio transmits over weak neighbouring Wi-Fi, improving airtime in a congested area. Off = standard. Higher = more aggressive. Applies live without dropping clients; the before/after channel utilisation is shown below. Revert by setting Off.');">Spatial Reuse (OBSS-PD)</a></th>
+						<th><a class="hintstyle" href="javascript:void(0);" onClick="alert('Spatial Reuse (OBSS-PD): raises the carrier-detect threshold so the radio transmits over weak neighbouring Wi-Fi, improving airtime in a congested area. Off = standard. Higher = more aggressive. Applies live without dropping clients; the before/after channel utilisation is shown below. Revert by setting Off. Tick Auto-detect to let the router scan the air every 15 minutes and pick the level automatically (the slider is then disabled and shows the current status).');">Spatial Reuse (OBSS-PD)</a></th>
 						<td>
 							<div>
 								<table>
@@ -2185,6 +2204,9 @@ function wifi7_mode(obj){
 										</td>
 										<td style="border:0px;">
 											<input type="button" class="button_gen" onclick="submitSR();" value="Apply &amp; Test">
+										</td>
+										<td style="border:0px;padding-left:10px;">
+											<input type="checkbox" id="sr_auto_chk" onclick="srAutoToggle();"><label for="sr_auto_chk">&nbsp;Auto-detect</label>
 										</td>
 									</tr>
 								</table>
@@ -2237,6 +2259,7 @@ function wifi7_mode(obj){
 	<input type="hidden" name="action_wait" value="5">
 	<input type="hidden" name="wl_unit" value="">
 	<input type="hidden" name="wl_sr_level" value="">
+	<input type="hidden" name="wl_sr_auto" value="">
 </form>
 </body>
 </html>

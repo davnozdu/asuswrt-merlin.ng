@@ -9,6 +9,11 @@ Asuswrt-Merlin 3006.xxx Changelog
          via "wl sr_config" without restarting wireless / dropping
          clients, and shows the channel utilisation before/after.
          Off restores the default behaviour.
+  - NEW: "Auto-detect" checkbox for Spatial Reuse - when ticked the
+         router scans the air (chanim OBSS) every 15 minutes via a
+         cron job and picks the level automatically per band, with a
+         2-level deadband and a safety cap; the slider is disabled and
+         shows the live status.  No need to choose a value by hand.
   - NEW: GT-BE98 "Remove Wi-Fi regulatory restrictions" toggle
          (Tools > Other Settings) now also unlocks UNII-4 (5G 149-177)
          and 2.4G channels 12/13 for auto channel selection, giving the
