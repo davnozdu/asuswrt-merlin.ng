@@ -24,6 +24,11 @@ Asuswrt-Merlin 3006.xxx Changelog
          instead of being discarded.  New web-UI options (WAN > Control
          D): DNS cache on/off, cache size (default 65536), serve-stale,
          TTL override, HTTP/3 (DoH3), and verbose logging.
+  - FIXED: GT-BE98 wireless channel-list generation (backport of Gnuton
+         PR #973): fall back to the regular chanspec hook when the AiMesh
+         DWB-derived chanspec list is empty, and guard missing 20 MHz
+         channel buckets - so the 6 GHz Wireless General page renders its
+         channel list after selecting 320 MHz.
   - FIXED: ctrld boot start is now fully non-blocking - deferred to a
          detached background shell (rc ctrld_check) ~20s after boot,
          so its bounded ntp/pids waits and dnsmasq regen can never
