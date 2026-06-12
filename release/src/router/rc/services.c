@@ -16013,9 +16013,9 @@ stop_ctrld(void)
 void
 start_ctrld(void)
 {
-	char cmd[256];
 	char uid[80];
-	int i;
+	FILE *fp;
+	int i, cache_size;
 
 	if (get_model() != MODEL_GTBE98)
 		return;
@@ -16027,8 +16027,7 @@ start_ctrld(void)
 	if (pids("ctrld"))
 		killall_tk("ctrld");
 
-	/* Make sure dnsmasq is on the NORMAL resolver before we launch ctrld, so
-	 * ctrld has working DNS to reach the Control D API and fetch its config.
+	/* Make sure dnsmasq is on the NORMAL resolver before we launch ctrld.
 	 * (ctrld is now stopped, so the pids("ctrld") gate in start_dnsmasq yields
 	 * the normal upstream.) This also recovers from a crash where dnsmasq was
 	 * left pointing at a dead ctrld. */
@@ -16048,25 +16047,68 @@ start_ctrld(void)
 		nvram_commit();
 	}
 
-	/* Plain forwarder in Control D mode (--cd): ctrld fetches its config from
-	 * the cloud and listens on its default port (5354, since dnsmasq holds 53);
-	 * config and log go to --homedir /tmp (tmpfs, never /jffs). We must NOT pass
-	 * --listen: that flag forces "basic/no-config" mode which ignores --cd and
-	 * demands --primary_upstream. No --iface either, so ctrld leaves dnsmasq and
-	 * /jffs alone (the firmware wires dnsmasq). Backgrounded so it can never
-	 * block boot.
-	 *
-	 * IMPORTANT: ctrld is launched while dnsmasq is still on the *normal*
-	 * resolver (the dnsmasq->ctrld switch in start_dnsmasq is gated on
-	 * pids("ctrld")). This avoids a chicken-and-egg deadlock: ctrld needs
-	 * working DNS to reach the Control D API and fetch its config. We then wait
-	 * (bounded) for ctrld to come up and only afterwards regenerate dnsmasq to
-	 * point at it. If ctrld never comes up, dnsmasq stays on the normal resolver
-	 * and DNS keeps working - no outage, no brick. */
-	snprintf(cmd, sizeof(cmd),
-		"/usr/sbin/ctrld run --cd %s --homedir /tmp --daemon >/dev/null 2>&1 &",
-		uid);
-	system(cmd);
+	/* Wait (bounded) for the network and clock to be ready before launching.
+	 * ntp_ready implies the WAN is up AND the system clock is valid, which the
+	 * DoH/TLS upstream needs for certificate validation. Never blocks boot
+	 * forever: capped at ~30s, after which the respawn cron will retry. */
+	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1; i++)
+		sleep(1);
+
+	/* Deterministic config mode: instead of --cd (which fetches config from the
+	 * Control D cloud at startup and auto-picks/relocates ports + may touch the
+	 * router's dnsmasq), we write our own ctrld.toml in tmpfs. ctrld needs no
+	 * cloud fetch to start, binds a FIXED 127.0.0.1:5354 (no :53 conflict, no
+	 * router auto-magic, nothing in /jffs), and forwards to the resolver's own
+	 * DoH endpoint - which still enforces the user's Control D profile server-
+	 * side. bootstrap_ip pins Control D's anycast so ctrld can reach the DoH
+	 * endpoint with NO DNS at all (robust against early-boot / no-DNS timing).
+	 * The [service]/upstream knobs below come straight from nvram (web UI). */
+	cache_size = nvram_get_int("ctrld_cache_size");
+	if (cache_size < 1)
+		cache_size = 4096;	/* ctrld disables the cache on an invalid size */
+	if ((fp = fopen("/tmp/ctrld.toml", "w")) != NULL) {
+		fprintf(fp,
+			"[service]\n"
+			"    log_level = '%s'\n"
+			"    log_path = '/tmp/ctrld.log'\n"
+			"    cache_enable = %s\n"
+			"    cache_size = %d\n"
+			"    cache_serve_stale = %s\n",
+			nvram_get_int("ctrld_debug") ? "debug" : "info",
+			nvram_get_int("ctrld_cache") ? "true" : "false",
+			cache_size,
+			nvram_get_int("ctrld_serve_stale") ? "true" : "false");
+		if (nvram_get_int("ctrld_ttl") > 0)
+			fprintf(fp, "    cache_ttl_override = %d\n", nvram_get_int("ctrld_ttl"));
+		fprintf(fp,
+			"\n"
+			"[network]\n"
+			"  [network.0]\n"
+			"    name = 'Everyone'\n"
+			"    cidrs = ['0.0.0.0/0']\n"
+			"\n"
+			"[upstream]\n"
+			"  [upstream.0]\n"
+			"    name = 'Control D'\n"
+			"    type = '%s'\n"
+			"    endpoint = 'https://dns.controld.com/%s'\n"
+			"    bootstrap_ip = '76.76.2.0'\n"
+			"    timeout = 5000\n"
+			"\n"
+			"[listener]\n"
+			"  [listener.0]\n"
+			"    ip = '127.0.0.1'\n"
+			"    port = 5354\n",
+			nvram_get_int("ctrld_doh3") ? "doh3" : "doh",
+			uid);
+		fclose(fp);
+	}
+
+	/* Launch backgrounded so it can never block boot. Output goes to a tmpfs log
+	 * (NOT /dev/null) so failures are diagnosable. --homedir /tmp keeps all state
+	 * off /jffs. */
+	system("/usr/sbin/ctrld run --config /tmp/ctrld.toml --homedir /tmp --daemon "
+		">/tmp/ctrld_run.log 2>&1 &");
 
 	for (i = 0; i < 12 && !pids("ctrld"); i++)
 		sleep(1);
@@ -16075,7 +16117,9 @@ start_ctrld(void)
 	/* Respawn watchdog (every 3 min) in case ctrld dies. */
 	eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
 
-	/* Now that ctrld is up, regenerate dnsmasq so it forwards to 127.0.0.1#5354. */
+	/* Now that ctrld is up, regenerate dnsmasq so it forwards to 127.0.0.1#5354.
+	 * (start_dnsmasq's ctrld upstream is gated on pids("ctrld"), so if ctrld
+	 * failed to come up dnsmasq stays on the normal resolver - no outage.) */
 #ifdef RTCONFIG_MULTILAN_CFG
 	stop_dnsmasq(ALL_SDN);
 	start_dnsmasq(ALL_SDN);

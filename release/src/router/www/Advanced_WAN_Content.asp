@@ -3136,8 +3136,37 @@ function get_default_wan_name(){
 				<th>Resolver ID</th>
 				<td>
 					<input type="text" id="ctrld_uid_inp" class="input_25_table" maxlength="64" value="" autocorrect="off" autocapitalize="off" placeholder="e.g. i7ieznru33">
-					<input type="button" class="button_gen" onclick="submitCtrld();" value="Apply Control D">
 					<br><span style="color:#FFCC00;font-size:12px;">Routes all DNS through Control D (your admin-panel policy). WAN DNS is bypassed and native DoT is turned off; disable DNS Director so it applies to every client. Starts last at boot, off by default.</span>
+				</td>
+			</tr>
+			<tr>
+				<th>DNS cache</th>
+				<td><input type="checkbox" id="ctrld_cache_chk"> <span style="color:#888;font-size:12px;">Cache answers locally - faster lookups, less upstream traffic.</span></td>
+			</tr>
+			<tr>
+				<th>Cache size (records)</th>
+				<td><input type="text" id="ctrld_cache_size_inp" class="input_12_table" maxlength="8" value="" autocorrect="off" autocapitalize="off"> <span style="color:#888;font-size:12px;">Number of cached entries. Default 65536 (router has plenty of RAM).</span></td>
+			</tr>
+			<tr>
+				<th>Serve stale on failure</th>
+				<td><input type="checkbox" id="ctrld_serve_stale_chk"> <span style="color:#888;font-size:12px;">Keep answering from cache if the upstream is briefly unreachable.</span></td>
+			</tr>
+			<tr>
+				<th>TTL override (sec)</th>
+				<td><input type="text" id="ctrld_ttl_inp" class="input_12_table" maxlength="8" value="" autocorrect="off" autocapitalize="off"> <span style="color:#888;font-size:12px;">Force a fixed cache TTL. 0 = off (respect real record TTLs).</span></td>
+			</tr>
+			<tr>
+				<th>HTTP/3 (DoH3)</th>
+				<td><input type="checkbox" id="ctrld_doh3_chk"> <span style="color:#888;font-size:12px;">Use DoH3/HTTP-3 upstream instead of DoH. Default off.</span></td>
+			</tr>
+			<tr>
+				<th>Verbose log</th>
+				<td><input type="checkbox" id="ctrld_debug_chk"> <span style="color:#888;font-size:12px;">Debug logging to /tmp/ctrld.log for troubleshooting. Default off.</span></td>
+			</tr>
+			<tr>
+				<th>&nbsp;</th>
+				<td>
+					<input type="button" class="button_gen" onclick="submitCtrld();" value="Apply Control D">
 					<div id="ctrld_status" style="margin-top:4px;font-size:12px;"></div>
 				</td>
 			</tr>
@@ -3179,6 +3208,12 @@ function get_default_wan_name(){
 	<input type="hidden" name="action_wait" value="5">
 	<input type="hidden" name="ctrld_enable" value="">
 	<input type="hidden" name="ctrld_uid" value="">
+	<input type="hidden" name="ctrld_cache" value="">
+	<input type="hidden" name="ctrld_cache_size" value="">
+	<input type="hidden" name="ctrld_serve_stale" value="">
+	<input type="hidden" name="ctrld_ttl" value="">
+	<input type="hidden" name="ctrld_doh3" value="">
+	<input type="hidden" name="ctrld_debug" value="">
 </form>
 <script>
 function ctrld_init(){
@@ -3189,14 +3224,30 @@ function ctrld_init(){
 	var en = ('<% nvram_get("ctrld_enable"); %>' == "1");
 	document.getElementById("ctrld_enable_chk").checked = en;
 	document.getElementById("ctrld_uid_inp").value = '<% nvram_get("ctrld_uid"); %>';
+	document.getElementById("ctrld_cache_chk").checked = ('<% nvram_get("ctrld_cache"); %>' == "1");
+	document.getElementById("ctrld_cache_size_inp").value = '<% nvram_get("ctrld_cache_size"); %>';
+	document.getElementById("ctrld_serve_stale_chk").checked = ('<% nvram_get("ctrld_serve_stale"); %>' == "1");
+	document.getElementById("ctrld_ttl_inp").value = '<% nvram_get("ctrld_ttl"); %>';
+	document.getElementById("ctrld_doh3_chk").checked = ('<% nvram_get("ctrld_doh3"); %>' == "1");
+	document.getElementById("ctrld_debug_chk").checked = ('<% nvram_get("ctrld_debug"); %>' == "1");
 	document.getElementById("ctrld_status").innerHTML = en ? "Status: enabled" : "Status: disabled";
 }
 function submitCtrld(){
 	var en = document.getElementById("ctrld_enable_chk").checked;
 	var uid = document.getElementById("ctrld_uid_inp").value.replace(/[^A-Za-z0-9]/g,'');
 	if(en && uid == ""){ alert("Enter your Control D Resolver ID first."); return; }
+	var cs = document.getElementById("ctrld_cache_size_inp").value.replace(/[^0-9]/g,'');
+	if(cs == "" || parseInt(cs,10) < 1) cs = "65536";
+	var ttl = document.getElementById("ctrld_ttl_inp").value.replace(/[^0-9]/g,'');
+	if(ttl == "") ttl = "0";
 	document.ctrld_form.ctrld_enable.value = en ? "1" : "0";
 	document.ctrld_form.ctrld_uid.value = uid;
+	document.ctrld_form.ctrld_cache.value = document.getElementById("ctrld_cache_chk").checked ? "1" : "0";
+	document.ctrld_form.ctrld_cache_size.value = cs;
+	document.ctrld_form.ctrld_serve_stale.value = document.getElementById("ctrld_serve_stale_chk").checked ? "1" : "0";
+	document.ctrld_form.ctrld_ttl.value = ttl;
+	document.ctrld_form.ctrld_doh3.value = document.getElementById("ctrld_doh3_chk").checked ? "1" : "0";
+	document.ctrld_form.ctrld_debug.value = document.getElementById("ctrld_debug_chk").checked ? "1" : "0";
 	document.getElementById("ctrld_status").innerHTML = en ? "Applying and starting Control D, please wait..." : "Stopping Control D...";
 	document.ctrld_form.submit();
 	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 6000);

@@ -2577,6 +2577,12 @@ struct nvram_tuple router_defaults[] = {
 
 	{ "ctrld_enable", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: Control D (ctrld) DNS forwarder, 0=off by default (opt-in overlay) */
 	{ "ctrld_uid", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: Control D resolver UID from the admin panel */
+	{ "ctrld_cache", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: ctrld DNS cache on/off (default on) */
+	{ "ctrld_cache_size", "65536", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: ctrld cache size in records (router has plenty of RAM) */
+	{ "ctrld_serve_stale", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: serve stale cached records if upstream is unreachable (default on) */
+	{ "ctrld_ttl", "0", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: ctrld cache TTL override in seconds, 0 = off (respect real TTLs) */
+	{ "ctrld_doh3", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: use DoH3 (HTTP/3) upstream instead of DoH (default off) */
+	{ "ctrld_debug", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: verbose ctrld logging (debug) for diagnostics (default off) */
 #ifdef RTCONFIG_DNSPRIVACY
 	{ "dnspriv_enable", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* 0: None 1: DNS-over-TLS */
 	{ "dnspriv_profile", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* 0: Opportunistic 1: Strict */

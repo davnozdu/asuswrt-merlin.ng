@@ -13,6 +13,17 @@ Asuswrt-Merlin 3006.xxx Changelog
          backgrounded and gated, so it can never block boot/brick the
          router, with a 3-minute respawn watchdog.  Update by re-baking
          a newer binary and rebuilding.
+  - CHANGED: Control D now runs from a firmware-generated ctrld.toml
+         (tmpfs) instead of cloud --cd mode.  It forwards to the
+         resolver's own DoH endpoint (your admin-panel policy still
+         applies server-side) on a FIXED 127.0.0.1:5354, with the
+         Control D anycast pinned as bootstrap_ip so it needs no DNS
+         to start - fixing a start-up race where ctrld could not fetch
+         its cloud config and exited.  Start now also waits (bounded)
+         for ntp_ready, and ctrld output is logged to /tmp/ctrld.log
+         instead of being discarded.  New web-UI options (WAN > Control
+         D): DNS cache on/off, cache size (default 65536), serve-stale,
+         TTL override, HTTP/3 (DoH3), and verbose logging.
   - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
          Wireless > Professional page.  Raises the carrier-detect
          threshold so the radio transmits over weak neighbouring
