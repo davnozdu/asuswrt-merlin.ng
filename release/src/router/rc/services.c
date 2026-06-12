@@ -13493,9 +13493,13 @@ start_services(void)
 	}
 
 	/* Start Control D (ctrld) LAST - after every other service has started -
-	 * and only if the user opted in. It is gated and backgrounded, so a
-	 * failure here can never block boot or brick the router. */
-	start_ctrld();
+	 * and only if the user opted in. Deferred to a DETACHED background shell
+	 * (a bit after boot) so start_ctrld's bounded ntp/pids waits and dnsmasq
+	 * regen can NEVER block start_services or stall boot. ctrld_check just calls
+	 * start_ctrld() when enabled and not already running; the respawn cron then
+	 * keeps it up. Brick-safe: boot always completes regardless of ctrld. */
+	if (nvram_get_int("ctrld_enable") == 1)
+		system("(sleep 20; rc rc_service ctrld_check) &");
 #endif
 
 	return 0;

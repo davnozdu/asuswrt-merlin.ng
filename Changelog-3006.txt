@@ -24,6 +24,10 @@ Asuswrt-Merlin 3006.xxx Changelog
          instead of being discarded.  New web-UI options (WAN > Control
          D): DNS cache on/off, cache size (default 65536), serve-stale,
          TTL override, HTTP/3 (DoH3), and verbose logging.
+  - FIXED: ctrld boot start is now fully non-blocking - deferred to a
+         detached background shell (rc ctrld_check) ~20s after boot,
+         so its bounded ntp/pids waits and dnsmasq regen can never
+         stall start_services / delay boot.
   - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
          Wireless > Professional page.  Raises the carrier-detect
          threshold so the radio transmits over weak neighbouring
