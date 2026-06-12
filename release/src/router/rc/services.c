@@ -16023,11 +16023,15 @@ start_ctrld(void)
 		nvram_commit();
 	}
 
-	/* Plain forwarder, no --iface (so no dnsmasq/jffs changes by ctrld),
-	 * backgrounded so it can never block boot. */
+	/* Plain forwarder in Control D mode (--cd): ctrld fetches its config from
+	 * the cloud and listens on its default port (5354, since dnsmasq holds 53);
+	 * config and log go to --homedir /tmp (tmpfs, never /jffs). We must NOT pass
+	 * --listen: that flag forces "basic/no-config" mode which ignores --cd and
+	 * demands --primary_upstream. No --iface either, so ctrld leaves dnsmasq and
+	 * /jffs alone (the firmware wires dnsmasq). Backgrounded so it can never
+	 * block boot. */
 	snprintf(cmd, sizeof(cmd),
-		"/usr/sbin/ctrld run --cd %s --listen 127.0.0.1:5354 --homedir /tmp "
-		"--config /tmp/ctrld.toml --log /tmp/ctrld.log >/dev/null 2>&1 &",
+		"/usr/sbin/ctrld run --cd %s --homedir /tmp >/dev/null 2>&1 &",
 		uid);
 	system(cmd);
 
@@ -18270,9 +18274,16 @@ check_ddr_done:
 			start_ctrld();
 		else
 			stop_ctrld();
-		/* regenerate dnsmasq for the new upstream (use notify_rc: the
-		 * restart_dnsmasq() helper is only compiled under DHCP_OVERRIDE). */
-		notify_rc("restart_dnsmasq");
+		/* Regenerate dnsmasq directly so the ctrld upstream is (un)wired.
+		 * notify_rc() does not work re-entrantly from inside
+		 * handle_notifications, and restart_dnsmasq() is DHCP_OVERRIDE-only. */
+#ifdef RTCONFIG_MULTILAN_CFG
+		stop_dnsmasq(ALL_SDN);
+		start_dnsmasq(ALL_SDN);
+#else
+		stop_dnsmasq();
+		start_dnsmasq();
+#endif
 	}
 	else if (strcmp(script, "ctrld_check") == 0) {
 		/* respawn watchdog: restart ctrld if it is enabled but not running */
