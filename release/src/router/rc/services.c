@@ -1742,10 +1742,12 @@ void start_dnsmasq(void)
 #endif /* __CONFIG_NORTON__ */
 
 #if defined(GTBE98)
-	if (nvram_match("ctrld_enable", "1") && get_model() == MODEL_GTBE98) {
+	if (nvram_match("ctrld_enable", "1") && pids("ctrld") && get_model() == MODEL_GTBE98) {
 		/* Control D (ctrld) is the sole DNS upstream: forward everything to
 		 * the local ctrld listener, ignore WAN/ISP DNS (no-resolv, no
-		 * servers-file) and let ctrld handle caching (cache-size=0). */
+		 * servers-file) and let ctrld handle caching (cache-size=0). Gated on
+		 * pids("ctrld") so dnsmasq only points here while ctrld is actually
+		 * running; otherwise it falls back to the normal resolver (no outage). */
 		fprintf(fp, "no-resolv\n"
 			    "server=127.0.0.1#5354\n"
 			    "no-poll\n"
@@ -15997,6 +15999,15 @@ stop_ctrld(void)
 		nvram_unset("ctrld_dnspriv_save");
 		nvram_commit();
 	}
+	/* ctrld no longer running -> regenerate dnsmasq back to the normal resolver
+	 * (start_dnsmasq's ctrld upstream is gated on pids("ctrld")). */
+#ifdef RTCONFIG_MULTILAN_CFG
+	stop_dnsmasq(ALL_SDN);
+	start_dnsmasq(ALL_SDN);
+#else
+	stop_dnsmasq();
+	start_dnsmasq();
+#endif
 }
 
 void
@@ -16004,6 +16015,7 @@ start_ctrld(void)
 {
 	char cmd[256];
 	char uid[80];
+	int i;
 
 	if (get_model() != MODEL_GTBE98)
 		return;
@@ -16014,6 +16026,19 @@ start_ctrld(void)
 
 	if (pids("ctrld"))
 		killall_tk("ctrld");
+
+	/* Make sure dnsmasq is on the NORMAL resolver before we launch ctrld, so
+	 * ctrld has working DNS to reach the Control D API and fetch its config.
+	 * (ctrld is now stopped, so the pids("ctrld") gate in start_dnsmasq yields
+	 * the normal upstream.) This also recovers from a crash where dnsmasq was
+	 * left pointing at a dead ctrld. */
+#ifdef RTCONFIG_MULTILAN_CFG
+	stop_dnsmasq(ALL_SDN);
+	start_dnsmasq(ALL_SDN);
+#else
+	stop_dnsmasq();
+	start_dnsmasq();
+#endif
 
 	/* Control D brings its own encrypted upstream, so turn off Merlin's
 	 * native DNS-over-TLS while ctrld is active (saved for restore on stop). */
@@ -16029,14 +16054,35 @@ start_ctrld(void)
 	 * --listen: that flag forces "basic/no-config" mode which ignores --cd and
 	 * demands --primary_upstream. No --iface either, so ctrld leaves dnsmasq and
 	 * /jffs alone (the firmware wires dnsmasq). Backgrounded so it can never
-	 * block boot. */
+	 * block boot.
+	 *
+	 * IMPORTANT: ctrld is launched while dnsmasq is still on the *normal*
+	 * resolver (the dnsmasq->ctrld switch in start_dnsmasq is gated on
+	 * pids("ctrld")). This avoids a chicken-and-egg deadlock: ctrld needs
+	 * working DNS to reach the Control D API and fetch its config. We then wait
+	 * (bounded) for ctrld to come up and only afterwards regenerate dnsmasq to
+	 * point at it. If ctrld never comes up, dnsmasq stays on the normal resolver
+	 * and DNS keeps working - no outage, no brick. */
 	snprintf(cmd, sizeof(cmd),
-		"/usr/sbin/ctrld run --cd %s --homedir /tmp >/dev/null 2>&1 &",
+		"/usr/sbin/ctrld run --cd %s --homedir /tmp --daemon >/dev/null 2>&1 &",
 		uid);
 	system(cmd);
 
+	for (i = 0; i < 12 && !pids("ctrld"); i++)
+		sleep(1);
+	sleep(2);	/* let ctrld bind its listener */
+
 	/* Respawn watchdog (every 3 min) in case ctrld dies. */
 	eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
+
+	/* Now that ctrld is up, regenerate dnsmasq so it forwards to 127.0.0.1#5354. */
+#ifdef RTCONFIG_MULTILAN_CFG
+	stop_dnsmasq(ALL_SDN);
+	start_dnsmasq(ALL_SDN);
+#else
+	stop_dnsmasq();
+	start_dnsmasq();
+#endif
 }
 #endif	/* GTBE98 */
 
@@ -18270,20 +18316,13 @@ check_ddr_done:
 		apply_spatial_reuse();
 	}
 	else if (strcmp(script, "ctrld") == 0) {
+		/* start_ctrld()/stop_ctrld() each bring ctrld up/down AND regenerate
+		 * dnsmasq to (un)wire the 127.0.0.1#5354 upstream once ctrld's state
+		 * is settled. */
 		if (nvram_get_int("ctrld_enable") == 1)
 			start_ctrld();
 		else
 			stop_ctrld();
-		/* Regenerate dnsmasq directly so the ctrld upstream is (un)wired.
-		 * notify_rc() does not work re-entrantly from inside
-		 * handle_notifications, and restart_dnsmasq() is DHCP_OVERRIDE-only. */
-#ifdef RTCONFIG_MULTILAN_CFG
-		stop_dnsmasq(ALL_SDN);
-		start_dnsmasq(ALL_SDN);
-#else
-		stop_dnsmasq();
-		start_dnsmasq();
-#endif
 	}
 	else if (strcmp(script, "ctrld_check") == 0) {
 		/* respawn watchdog: restart ctrld if it is enabled but not running */
