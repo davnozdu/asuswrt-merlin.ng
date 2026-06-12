@@ -18270,7 +18270,9 @@ check_ddr_done:
 			start_ctrld();
 		else
 			stop_ctrld();
-		restart_dnsmasq(0);
+		/* regenerate dnsmasq for the new upstream (use notify_rc: the
+		 * restart_dnsmasq() helper is only compiled under DHCP_OVERRIDE). */
+		notify_rc("restart_dnsmasq");
 	}
 	else if (strcmp(script, "ctrld_check") == 0) {
 		/* respawn watchdog: restart ctrld if it is enabled but not running */
