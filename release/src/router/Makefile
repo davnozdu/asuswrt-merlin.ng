@@ -3210,6 +3210,15 @@ endif
 	@# Fix /usr/lib permission for OpenVPN authentication.
 	@chmod 755 $(TARGETDIR)/usr/lib
 
+	@# GT-BE98 has a space-tight dual-image flash; drop the Samba (SMB) server
+	@# and the Ookla speedtest binary so the image fits the inactive partition.
+	@# (libsmbclient is kept - lighttpd/uamsrv reference it.) Done on the final
+	@# TARGETDIR so it can never break linking.
+ifeq ($(BUILD_NAME),GT-BE98)
+	-@rm -f $(TARGETDIR)/usr/sbin/samba_multicall $(TARGETDIR)/usr/sbin/smbd $(TARGETDIR)/usr/sbin/nmbd $(TARGETDIR)/usr/sbin/wsdd2
+	-@cd $(TARGETDIR) && find . -name "ookla" | xargs rm -rf
+endif
+
 	@################################################
 	@# call platformGen_Target at end of gen_target #
 	@################################################

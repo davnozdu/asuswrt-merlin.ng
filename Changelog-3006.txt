@@ -34,10 +34,13 @@ Asuswrt-Merlin 3006.xxx Changelog
   - SLIM: GT-BE98 image trimmed so it fits the device's space-tight
          dual-image flash (the ROG image + baked ctrld no longer fit the
          inactive partition for a normal web-UI update). Disabled for
-         GT-BE98: AiProtection / TrendMicro DPI (BWDPI - ordinary QoS
-         stays), AiCloud 2.0 + Cloud Sync (WEBDAV/SMARTSYNCBASE), Tor;
-         and dropped all language dictionaries except EN/RU/UK. Frees
-         ~7 MiB so the build flashes and updates normally again.
+         GT-BE98: AiCloud 2.0 + Cloud Sync (WEBDAV/SMARTSYNCBASE) and Tor;
+         dropped all language dictionaries except EN/RU/UK; and the Samba
+         (SMB) file-sharing server + Ookla speedtest binaries are removed
+         from the final image. AiProtection, OpenVPN, media server, etc.
+         all stay. Frees ~8 MiB so the build flashes/updates normally.
+         (BWDPI stays enabled: AMAS code references it unconditionally,
+         so BWDPI=n breaks linking.)
   - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
          Wireless > Professional page.  Raises the carrier-detect
          threshold so the radio transmits over weak neighbouring
