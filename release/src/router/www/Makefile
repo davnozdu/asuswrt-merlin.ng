@@ -330,6 +330,12 @@ else
 endif
 	echo " WWW FOR $(BUILD_NAME)"
 
+# GT-BE98 has a space-tight dual-image flash; keep only EN/RU/UK language
+# dictionaries to shrink the image so it fits the inactive partition.
+ifeq ($(BUILD_NAME),GT-BE98)
+	-cd $(INSTALLDIR)/www && for f in *.dict; do case "$$f" in EN.dict|RU.dict|UK.dict) ;; *) rm -f "$$f" ;; esac; done
+endif
+
 	rm -rf $(INSTALLDIR)/www/images/New_ui/asustitle_ie6.png
 ifneq ($(RTCONFIG_FANCTRL),y)
 	rm -rf $(INSTALLDIR)/www/Advanced_PerformanceTuning_Content.asp

@@ -18373,6 +18373,13 @@ check_ddr_done:
 			stop_ctrld();
 	}
 	else if (strcmp(script, "ctrld_check") == 0) {
+		/* Keep ctrld's tmpfs (RAM) logs bounded so they can never eat memory:
+		 * trim each to the last 64 KB once it grows past 128 KB. The `cat`
+		 * rewrite truncates the same inode, so ctrld's open file keeps
+		 * appending without losing its handle. Runs every 3 min via the cron. */
+		system("for f in /tmp/ctrld.log /tmp/ctrld_run.log; do "
+		       "[ -f \"$f\" ] && [ `wc -c < \"$f\"` -gt 131072 ] && "
+		       "{ tail -c 65536 \"$f\" > \"$f.t\" && cat \"$f.t\" > \"$f\"; rm -f \"$f.t\"; }; done");
 		/* respawn watchdog: restart ctrld if it is enabled but not running */
 		if (nvram_get_int("ctrld_enable") == 1 && !pids("ctrld"))
 			start_ctrld();

@@ -28,6 +28,16 @@ Asuswrt-Merlin 3006.xxx Changelog
          detached background shell (rc ctrld_check) ~20s after boot,
          so its bounded ntp/pids waits and dnsmasq regen can never
          stall start_services / delay boot.
+  - CHANGED: ctrld tmpfs logs (/tmp/ctrld.log, /tmp/ctrld_run.log) are
+         now capped (trimmed to last 64 KB past 128 KB, every 3 min via
+         the ctrld_check cron) so they can never eat RAM.
+  - SLIM: GT-BE98 image trimmed so it fits the device's space-tight
+         dual-image flash (the ROG image + baked ctrld no longer fit the
+         inactive partition for a normal web-UI update). Disabled for
+         GT-BE98: AiProtection / TrendMicro DPI (BWDPI - ordinary QoS
+         stays), AiCloud 2.0 + Cloud Sync (WEBDAV/SMARTSYNCBASE), Tor;
+         and dropped all language dictionaries except EN/RU/UK. Frees
+         ~7 MiB so the build flashes and updates normally again.
   - NEW: GT-BE98 per-band "Spatial Reuse (OBSS-PD)" slider on the
          Wireless > Professional page.  Raises the carrier-detect
          threshold so the radio transmits over weak neighbouring
