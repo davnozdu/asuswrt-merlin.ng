@@ -26,27 +26,6 @@ function mksquashfs_img()
 parl_token_get
 (
 sqshimg_name="$1"
-# GT-BE98: prune unused services from the rootfs right before squashing so the
-# ROG image + baked ctrld fits the space-tight dual-image flash. This is the
-# REAL squashfs source ($TARGET_FS); file-level, so it can never break linking.
-# Every line ends with "|| true" because this script has a global ERR trap.
-if [ "$BUILD_NAME" = "GT-BE98" ] && [ -d "$TARGET_FS" ]; then
-    echo "=== GT-BE98 slim: pruning $TARGET_FS before squashfs ===" || true
-    # All removals in a set+e subshell that always returns 0, so the script's
-    # global ERR trap can never abort the build (no pipes -> no SIGPIPE either).
-    ( set +e
-      find "$TARGET_FS" \( -name samba_multicall -o -name smbd -o -name nmbd -o -name smbpasswd -o -name wsdd2 \
-        -o -name lighttpd -o -name lighttpd-arpping -o -name lighttpd-monitor -o -name uamsrv -o -name sambaclient \
-        -o -name webdav_client -o -name asuswebstorage -o -name dropbox_client -o -name ftpclient \
-        -o -name minidlna -o -name mt-daapd -o -name vsftpd -o -name afpd -o -name cnid_dbd -o -name cnid_metad \
-        -o -name u2ec -o -name lpd -o -name Tor -o -name ookla \
-        -o -name 'libsmbclient.so' -o -name 'libsmbclient.so.0' \) -exec rm -rf {} + 2>/dev/null
-      find "$TARGET_FS" -name '*.dict' ! -name EN.dict ! -name RU.dict ! -name UK.dict -delete 2>/dev/null
-      du -sk "$TARGET_FS" 2>/dev/null
-      true
-    ) 2>/dev/null || true
-    echo "=== GT-BE98 slim: prune done ===" || true
-fi
 if [ "$BRCM_IKOS" == "y" ]; then
     $HOSTTOOLS_DIR/mksquashfs $TARGET_FS $PROFILE_DIR/$sqshimg_name -noappend -all-root
     $HOSTTOOLS_DIR/mksquashfs $TARGET_FS $PROFILE_DIR/${sqshimg_name}.raw -noappend -all-root -noI -noD -noF -noX
@@ -72,6 +51,29 @@ parl_token_free
 
 parl_token_init 1
 mkdir -p $TARGET_FS/bootfs
+
+# GT-BE98: prune unused services from the rootfs ONCE here, in the main flow,
+# BEFORE the (parallel, backgrounded) squashfs/ubifs/ext4 packers read it - so
+# there is no race (doing it inside mksquashfs_img's backgrounded subshell made
+# mkfs.ubifs fail with "No such file (error 2)"). File-level removal -> can
+# never break linking. Wrapped in (set +e ...) || true so the script's global
+# ERR trap can never abort the build. Samba is intentionally KEPT.
+if [ "$BUILD_NAME" = "GT-BE98" ] && [ -d "$TARGET_FS" ]; then
+    echo "=== GT-BE98 slim: pruning $TARGET_FS (unused services) ===" || true
+    ( set +e
+      find "$TARGET_FS" \( -name lighttpd -o -name lighttpd-arpping -o -name lighttpd-monitor \
+        -o -name uamsrv -o -name sambaclient -o -name webdav_client -o -name asuswebstorage \
+        -o -name dropbox_client -o -name ftpclient \
+        -o -name minidlna -o -name mt-daapd -o -name vsftpd -o -name afpd -o -name cnid_dbd -o -name cnid_metad \
+        -o -name u2ec -o -name lpd -o -name Tor -o -name ookla \
+        -o -name 'libsmbclient.so' -o -name 'libsmbclient.so.0' \
+        -o -name 'libavcodec.so*' -o -name 'libavformat.so*' -o -name 'libavutil.so*' \) -exec rm -rf {} + 2>/dev/null
+      find "$TARGET_FS" -name '*.dict' ! -name EN.dict ! -name RU.dict ! -name UK.dict -delete 2>/dev/null
+      du -sk "$TARGET_FS" 2>/dev/null
+      true
+    ) 2>/dev/null || true
+    echo "=== GT-BE98 slim: prune done ===" || true
+fi
 
 if squashfs_enabled; then
     mksquashfs_img rootfs.img
