@@ -3220,19 +3220,6 @@ gen_gpl_excludes_router:
 
 image:
 	@rm -f $(PLATFORMDIR)/target.image
-	@# GT-BE98 dual-image flash is space-tight: the ROG image + baked ctrld is
-	@# ~2.5 MiB too big for the inactive partition. Reclaim space by deleting
-	@# unused service binaries right before squashfs (file-level on the final
-	@# packaged TARGETDIR -> cannot break linking; works regardless of the
-	@# per-package fs.install layout). Router is plain routing, so none needed.
-ifeq ($(BUILD_NAME),GT-BE98)
-	@echo "=== GT-BE98 slim: pruning unused services from $(TARGETDIR) ==="
-	-@find $(TARGETDIR) \( -name samba_multicall -o -name smbd -o -name nmbd -o -name smbpasswd -o -name wsdd2 -o -name webdav_client -o -name asuswebstorage -o -name dropbox_client -o -name ftpclient -o -name minidlna -o -name mt-daapd -o -name vsftpd -o -name afpd -o -name cnid_dbd -o -name cnid_metad -o -name u2ec -o -name lpd -o -name Tor -o -name ookla \) -exec rm -rf {} + 2>/dev/null
-	-@find $(TARGETDIR) -name "*.dict" ! -name EN.dict ! -name RU.dict ! -name UK.dict -delete 2>/dev/null
-	@echo "=== GT-BE98 slim: 30 largest files remaining ==="
-	-@find $(TARGETDIR) -type f -exec ls -la {} + 2>/dev/null | sort -k5 -rn | head -30
-	@echo "=== GT-BE98 slim: prune done ==="
-endif
 ifneq (,$(filter y,$(RTCONFIG_RALINK) $(RTCONFIG_QCA) $(RTCONFIG_REALTEK) $(RTCONFIG_ALPINE) $(RTCONFIG_LANTIQ)))
 	@$(MAKE) -C $(LINUXDIR)/scripts/squashfs $(MKSQUASHFS_TARGET)
 	@$(LINUXDIR)/scripts/squashfs/$(MKSQUASHFS) $(TARGETDIR) $(PLATFORMDIR)/target.image -all-root -noappend -nopad
