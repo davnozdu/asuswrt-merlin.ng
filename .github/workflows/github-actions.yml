@@ -9,8 +9,9 @@ jobs:
         fail-fast: false
         matrix:
           cfg:
-            - { model: "gt-be98",          sdk: "src-rt-5.04behnd.4916",      ui: "default",  skip: false }
-            - { model: "gt-be98",          sdk: "src-rt-5.04behnd.4916",      ui: "rog",      skip: true }
+            - { model: "gt-be98", sdk: "src-rt-5.04behnd.4916", ui: "default", ctrld: "n", name: "default", skip: false }
+            - { model: "gt-be98", sdk: "src-rt-5.04behnd.4916", ui: "rog",     ctrld: "n", name: "rog",     skip: false }
+            - { model: "gt-be98", sdk: "src-rt-5.04behnd.4916", ui: "default", ctrld: "y", name: "slim",    skip: false }
       container:
         image: gnuton/asuswrt-merlin-toolchains-docker:latest
         env:
@@ -18,6 +19,7 @@ jobs:
           MODEL: ${{ matrix.cfg.model }}
           SDK: ${{ matrix.cfg.sdk }}
           UI: ${{ matrix.cfg.ui }}
+          CTRLD: ${{ matrix.cfg.ctrld }}
           SKIP_BUILD: ${{ matrix.cfg.skip }}
           GIT_REPO: "https://github.com/davnozdu/asuswrt-merlin.ng.git"
           PROJECT_DIR: "/project/asuswrt-merlin.ng"
@@ -57,6 +59,24 @@ jobs:
             fi
 
             ls /home/docker
+        - name: "Fetch latest ctrld (slim flavor only)"
+          if: matrix.cfg.skip == false && matrix.cfg.ctrld == 'y'
+          run: |
+            cd ${PROJECT_DIR}
+            DEST="release/src/router/ctrld/prebuilt/ctrld"
+            # Resolve the GitHub "Latest" release WITHOUT the API (no rate limit):
+            # follow the releases/latest redirect to /tag/vX.Y.Z and parse the version,
+            # then build the arm64 asset URL directly.
+            VER=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/Control-D-Inc/ctrld/releases/latest | sed 's#.*/tag/v##')
+            echo "Latest ctrld version: ${VER}"
+            URL="https://github.com/Control-D-Inc/ctrld/releases/download/v${VER}/ctrld_${VER}_linux_arm64.tar.gz"
+            mkdir -p /tmp/ctrldul
+            if [ -n "${VER}" ] && curl -fsSL "${URL}" -o /tmp/ctrld.tgz && tar xzf /tmp/ctrld.tgz -C /tmp/ctrldul ctrld; then
+                install -D /tmp/ctrldul/ctrld "${DEST}" && chmod 755 "${DEST}"
+                echo "ctrld updated to v${VER}:"; ls -l "${DEST}"
+            else
+                echo "WARN: could not fetch latest ctrld (v${VER}); keeping committed blob"; ls -l "${DEST}" || true
+            fi
         - name: "Set version"
           if: matrix.cfg.skip == false
           run: |
@@ -73,7 +93,7 @@ jobs:
                 echo "Release detected. Updating version.conf with MAJOR_VER=${MAJOR_VER} and MINOR_VER=${MINOR_VER}"
             fi
         - name: Generate changelog
-          if: matrix.cfg.skip == false && matrix.cfg.ui == 'default'
+          if: matrix.cfg.skip == false && matrix.cfg.name == 'default'
           run: |
             cd ${PROJECT_DIR}
             python tools/get-last-notes.py > "${CHANGELOG_FILE}"
@@ -157,7 +177,7 @@ jobs:
           if: matrix.cfg.skip == false
           uses: actions/upload-artifact@v4
           with:
-            name: release-${{ matrix.cfg.model }}-${{ matrix.cfg.ui }}
+            name: release-${{ matrix.cfg.model }}-${{ matrix.cfg.name }}
             path: "/project/artifacts"
           continue-on-error: true
     release-job:

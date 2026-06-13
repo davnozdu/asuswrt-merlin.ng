@@ -2,6 +2,17 @@ Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
 3006.102.8_alpha2-dav1 (xx-Jun-2026)
+ - RELEASE: GT-BE98 now builds THREE images from one branch via the CI
+         matrix: two "original" full-featured builds (default, rog, NO
+         Control D, no slim prune) and one "slim" build (default theme +
+         baked Control D + the space-saving prune). All shared changes
+         (Spatial Reuse, Wi-Fi unlock, EU channels, 6 GHz channel-list
+         fix, etc.) land in all three; only the slim build gets ctrld +
+         the prune (gated CTRLD=y). The slim build downloads the LATEST
+         official ctrld arm64 release at build time (via the GitHub
+         releases/latest redirect, no API), falling back to the committed
+         blob. Version suffix: default = alpha2-dav14, rog = ..._rog,
+         slim = ...-ctrld.
   - NEW: GT-BE98 built-in Control D (ctrld) DNS forwarder (WAN >
          Control D).  The arm64 ctrld binary (v1.5.2, MIT) is baked
          into the read-only rootfs - never /jffs - and survives factory

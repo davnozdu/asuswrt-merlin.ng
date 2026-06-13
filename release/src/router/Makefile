@@ -2541,11 +2541,15 @@ ifeq ($(BRCM_CHIP),$(filter $(BRCM_CHIP),4908 4912))
 	install -D $(TOOLCHAIN_64)/aarch64-buildroot-linux-gnu/sysroot/lib/libnss_files.so.2 $(INSTALLDIR)/lib/aarch64/libnss_files.so.2
 endif
 
-# GT-BE98: bake in the Control D (ctrld) DNS forwarder - prebuilt static arm64
-# binary, baked into the read-only rootfs (never /jffs). MIT licensed.
+# GT-BE98 SLIM flavor only (CTRLD=y from the CI matrix): bake in the Control D
+# (ctrld) DNS forwarder - prebuilt static arm64 binary, into the read-only
+# rootfs (never /jffs). MIT licensed. The two "original" builds (CTRLD!=y) ship
+# without it. The buildROOTFS slim prune is gated on CTRLD=y to match.
 ifeq ($(HND_ROUTER_BE_4916),y)
+ifeq ($(CTRLD),y)
 	install -D $(TOP)/ctrld/prebuilt/ctrld $(INSTALLDIR)/usr/sbin/ctrld
 	chmod 755 $(INSTALLDIR)/usr/sbin/ctrld
+endif
 endif
 
 #ifeq ($(RTCONFIG_CFEZ),y)
