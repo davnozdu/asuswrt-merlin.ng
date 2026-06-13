@@ -16083,8 +16083,12 @@ start_ctrld(void)
 	if (*host == '\0')
 		strlcpy(host, "GT-BE98", sizeof(host));
 
+	/* Run from /tmp (tmpfs, writable): ctrld --cd writes its fetched config to
+	 * ./ctrld.toml in the CWD, and the rc CWD is the read-only rootfs -> without
+	 * this it fatals "failed to write default config file: read-only file
+	 * system" and never starts. --homedir/--log already point at tmpfs too. */
 	snprintf(cmd, sizeof(cmd),
-		"/usr/sbin/ctrld run --cd %s --proto %s --custom-hostname '%s' "
+		"cd /tmp && /usr/sbin/ctrld run --cd %s --proto %s --custom-hostname '%s' "
 		"--cache_size %d --homedir /tmp --log /tmp/ctrld.log %s --daemon "
 		">/tmp/ctrld_run.log 2>&1 &",
 		uid,
