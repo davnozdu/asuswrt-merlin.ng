@@ -16018,7 +16018,8 @@ void
 start_ctrld(void)
 {
 	char uid[80];
-	FILE *fp;
+	char host[80];
+	char cmd[384];
 	int i, cache_size;
 
 	if (get_model() != MODEL_GTBE98)
@@ -16058,61 +16059,40 @@ start_ctrld(void)
 	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1; i++)
 		sleep(1);
 
-	/* Deterministic config mode: instead of --cd (which fetches config from the
-	 * Control D cloud at startup and auto-picks/relocates ports + may touch the
-	 * router's dnsmasq), we write our own ctrld.toml in tmpfs. ctrld needs no
-	 * cloud fetch to start, binds a FIXED 127.0.0.1:5354 (no :53 conflict, no
-	 * router auto-magic, nothing in /jffs), and forwards to the resolver's own
-	 * DoH endpoint - which still enforces the user's Control D profile server-
-	 * side. bootstrap_ip pins Control D's anycast so ctrld can reach the DoH
-	 * endpoint with NO DNS at all (robust against early-boot / no-DNS timing).
-	 * The [service]/upstream knobs below come straight from nvram (web UI). */
-	cache_size = nvram_get_int("ctrld_cache_size");
-	if (cache_size < 1)
-		cache_size = 4096;	/* ctrld disables the cache on an invalid size */
-	if ((fp = fopen("/tmp/ctrld.toml", "w")) != NULL) {
-		fprintf(fp,
-			"[service]\n"
-			"    log_level = '%s'\n"
-			"    log_path = '/tmp/ctrld.log'\n"
-			"    cache_enable = %s\n"
-			"    cache_size = %d\n"
-			"    cache_serve_stale = %s\n",
-			nvram_get_int("ctrld_debug") ? "debug" : "info",
-			nvram_get_int("ctrld_cache") ? "true" : "false",
-			cache_size,
-			nvram_get_int("ctrld_serve_stale") ? "true" : "false");
-		if (nvram_get_int("ctrld_ttl") > 0)
-			fprintf(fp, "    cache_ttl_override = %d\n", nvram_get_int("ctrld_ttl"));
-		fprintf(fp,
-			"\n"
-			"[network]\n"
-			"  [network.0]\n"
-			"    name = 'Everyone'\n"
-			"    cidrs = ['0.0.0.0/0']\n"
-			"\n"
-			"[upstream]\n"
-			"  [upstream.0]\n"
-			"    name = 'Control D'\n"
-			"    type = '%s'\n"
-			"    endpoint = 'https://dns.controld.com/%s'\n"
-			"    bootstrap_ip = '76.76.2.0'\n"
-			"    timeout = 5000\n"
-			"\n"
-			"[listener]\n"
-			"  [listener.0]\n"
-			"    ip = '127.0.0.1'\n"
-			"    port = 5354\n",
-			nvram_get_int("ctrld_doh3") ? "doh3" : "doh",
-			uid);
-		fclose(fp);
+	/* Control D mode (--cd <resolver_uid>): ctrld authenticates to the Control D
+	 * API with the user's Resolver ID, fetches the FULL profile (all admin-panel
+	 * rules) AND registers as a device, so the Control D dashboard / status page
+	 * recognise it. We must NOT pass --listen (on this binary --listen forces
+	 * "no config mode" and fatals "listen and primary_upstream must be set") and
+	 * NOT --iface (so ctrld never touches dnsmasq/jffs). With 53 held by dnsmasq,
+	 * ctrld's CD-mode listener auto-falls back to 5354 - the fixed port dnsmasq
+	 * already forwards to (verified on hardware: 53 busy -> 5354). --proto picks
+	 * DoH (HTTP/2) vs DoH3 (HTTP/3 / QUIC); --custom-hostname is the device name
+	 * shown in the dashboard; --cache_size enables the local cache. Output/state
+	 * stay in tmpfs (--homedir /tmp, --log /tmp/ctrld.log), never /jffs. ctrld
+	 * fetches its config over DNS at startup, which works because dnsmasq is on
+	 * the normal resolver here (the dnsmasq->ctrld switch is gated on pids). */
+	if (nvram_get_int("ctrld_cache") == 0) {
+		cache_size = 0;		/* "DNS cache" unchecked -> disable cache */
+	} else {
+		cache_size = nvram_get_int("ctrld_cache_size");
+		if (cache_size < 1)
+			cache_size = 65536;
 	}
+	strlcpy(host, nvram_safe_get("lan_hostname"), sizeof(host));
+	if (*host == '\0')
+		strlcpy(host, "GT-BE98", sizeof(host));
 
-	/* Launch backgrounded so it can never block boot. Output goes to a tmpfs log
-	 * (NOT /dev/null) so failures are diagnosable. --homedir /tmp keeps all state
-	 * off /jffs. */
-	system("/usr/sbin/ctrld run --config /tmp/ctrld.toml --homedir /tmp --daemon "
-		">/tmp/ctrld_run.log 2>&1 &");
+	snprintf(cmd, sizeof(cmd),
+		"/usr/sbin/ctrld run --cd %s --proto %s --custom-hostname '%s' "
+		"--cache_size %d --homedir /tmp --log /tmp/ctrld.log %s --daemon "
+		">/tmp/ctrld_run.log 2>&1 &",
+		uid,
+		nvram_get_int("ctrld_doh3") ? "doh3" : "doh",
+		host,
+		cache_size,
+		nvram_get_int("ctrld_debug") ? "-vv" : "");
+	system(cmd);
 
 	for (i = 0; i < 12 && !pids("ctrld"); i++)
 		sleep(1);

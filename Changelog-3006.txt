@@ -13,7 +13,19 @@ Asuswrt-Merlin 3006.xxx Changelog
          backgrounded and gated, so it can never block boot/brick the
          router, with a 3-minute respawn watchdog.  Update by re-baking
          a newer binary and rebuilding.
-  - CHANGED: Control D now runs from a firmware-generated ctrld.toml
+  - CHANGED: Control D now runs in native --cd mode (ctrld run --cd
+         <ResolverID>) so it registers as a DEVICE in the Control D
+         dashboard / status page and pulls the full admin-panel profile,
+         not just the raw DoH endpoint. --proto selects DoH vs DoH3
+         (HTTP/3 / QUIC) - the web-UI HTTP/3 toggle now works; the device
+         name comes from --custom-hostname (lan_hostname). ctrld's CD-mode
+         listener auto-falls-back to 5354 (53 held by dnsmasq), which is
+         the port dnsmasq forwards to. Cache size stays configurable
+         (--cache_size); serve-stale / TTL-override are not exposed by
+         --cd (ctrld respects real record TTLs) and were removed from the
+         web UI. No --listen (forces no-config mode) and no --iface (so
+         dnsmasq/jffs are untouched).
+  - PREV: Control D ran from a firmware-generated ctrld.toml
          (tmpfs) instead of cloud --cd mode.  It forwards to the
          resolver's own DoH endpoint (your admin-panel policy still
          applies server-side) on a FIXED 127.0.0.1:5354, with the
