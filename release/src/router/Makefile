@@ -3210,13 +3210,27 @@ endif
 	@# Fix /usr/lib permission for OpenVPN authentication.
 	@chmod 755 $(TARGETDIR)/usr/lib
 
-	@# GT-BE98 has a space-tight dual-image flash; drop the Samba (SMB) server
-	@# and the Ookla speedtest binary so the image fits the inactive partition.
-	@# (libsmbclient is kept - lighttpd/uamsrv reference it.) Done on the final
-	@# TARGETDIR so it can never break linking.
+	@# GT-BE98 has a space-tight dual-image flash; the ROG image + baked ctrld
+	@# is ~2.5 MiB too big for the inactive partition. Reclaim space by deleting
+	@# unused service binaries from the FINAL TARGETDIR (file-level, so it can
+	@# never break linking - flags like WEBDAV=n/OOKLA proved unreliable here).
+	@# The router is used for plain routing, so none of these are needed.
 ifeq ($(BUILD_NAME),GT-BE98)
-	-@rm -f $(TARGETDIR)/usr/sbin/samba_multicall $(TARGETDIR)/usr/sbin/smbd $(TARGETDIR)/usr/sbin/nmbd $(TARGETDIR)/usr/sbin/wsdd2
+	@echo "=== GT-BE98 slim: removing unused service binaries ==="
+	@# Samba / SMB file sharing
+	-@rm -f $(TARGETDIR)/usr/sbin/samba_multicall $(TARGETDIR)/usr/sbin/smbd $(TARGETDIR)/usr/sbin/nmbd $(TARGETDIR)/usr/sbin/smbpasswd $(TARGETDIR)/usr/sbin/wsdd2
+	@# Cloud Sync providers (AiCloud sync)
+	-@rm -f $(TARGETDIR)/usr/sbin/webdav_client $(TARGETDIR)/usr/sbin/asuswebstorage $(TARGETDIR)/usr/sbin/dropbox_client $(TARGETDIR)/usr/sbin/ftpclient $(TARGETDIR)/usr/sbin/inotify
+	@# Media server (DLNA + iTunes), FTP, Time Machine, network printer
+	-@rm -f $(TARGETDIR)/usr/sbin/minidlna $(TARGETDIR)/usr/sbin/mt-daapd $(TARGETDIR)/usr/sbin/vsftpd $(TARGETDIR)/usr/sbin/afpd $(TARGETDIR)/usr/sbin/cnid_dbd $(TARGETDIR)/usr/sbin/cnid_metad $(TARGETDIR)/usr/sbin/u2ec $(TARGETDIR)/usr/sbin/lpd
+	@# Tor + Ookla speedtest
+	-@rm -f $(TARGETDIR)/usr/sbin/Tor $(TARGETDIR)/usr/sbin/tor
 	-@cd $(TARGETDIR) && find . -name "ookla" | xargs rm -rf
+	@# Keep only EN/RU/UK language dictionaries
+	-@cd $(TARGETDIR)/www && for f in *.dict; do case "$$f" in EN.dict|RU.dict|UK.dict) ;; *) rm -f "$$f" ;; esac; done
+	@echo "=== GT-BE98 slim: 30 largest files left in image ==="
+	-@find $(TARGETDIR) -type f -exec ls -la {} + 2>/dev/null | sort -k5 -rn | head -30
+	@echo "=== GT-BE98 slim: inventory end ==="
 endif
 
 	@################################################
