@@ -2724,13 +2724,19 @@ FILE *fp = NULL;
 #define hotplug_dbg(fmt, args...) (\
 { \
 	char err_str[100] = {0}; \
-	char err_str2[100] = {0}; \
+	char err_str2[128] = {0}; /* M4: holds "PID:%d " + err_str without truncation */ \
 	if (hotplug_pid == -1) hotplug_pid = getpid(); \
-	if (!fp) fp = fopen("/tmp/usb_err", "a+"); \
-	sprintf(err_str, fmt, ##args); \
-	sprintf(err_str2, "PID:%d %s", hotplug_pid, err_str); \
-	fwrite(err_str2, strlen(err_str2), 1,  fp); \
-	fflush(fp); \
+	if (!fp) { \
+		/* L2: O_NOFOLLOW + 0600 so a planted /tmp/usb_err symlink can't redirect root appends */ \
+		int _fd = open("/tmp/usb_err", O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW, 0600); \
+		if (_fd >= 0) fp = fdopen(_fd, "a"); \
+	} \
+	if (fp) { \
+		snprintf(err_str, sizeof(err_str), fmt, ##args); /* M4: bound uevent-derived text */ \
+		snprintf(err_str2, sizeof(err_str2), "PID:%d %s", hotplug_pid, err_str); \
+		fwrite(err_str2, strlen(err_str2), 1,  fp); \
+		fflush(fp); \
+	} \
 } \
 )
 
@@ -2898,7 +2904,7 @@ static void optimize_block_device(const char *devname)
 	int err;
 
 	memset(blkdev, 0, sizeof(blkdev));
-	strcpy(blkdev, devname);
+	strlcpy(blkdev, devname, sizeof(blkdev));	/* M8 */
 	for (p = blkdev; *p; ++p) {
 		if (!isdigit(*p))
 			continue;
@@ -4513,7 +4519,7 @@ int asus_usb_interface(const char *device_name, const char *action)
 			nvram_unset(nvram_usb_path);
 		}
 
-		strcpy(device_type, nvram_safe_get(prefix));
+		strlcpy(device_type, nvram_safe_get(prefix), sizeof(device_type));	/* M8 */
 
 #ifdef RTCONFIG_USB_MODEM
 		vid = strtoul(nvram_safe_get(strcat_r(prefix, "_vid", tmp)), NULL, 16);
