@@ -1848,7 +1848,7 @@ void mtwan_append_s46_resolvconf_ipv4(int wan_unit)
 		strlcpy(wan_dns_buf, nvram_pf_safe_get(wan_prefix, "dns"), sizeof(wan_dns_buf));
 		if (wan_dns_buf[0]) {
 			foreach (wan_dns, wan_dns_buf, next_dns) {
-				if (doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) {
+				if (is_valid_ip(wan_dns) > 0 && doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) { /* hardening H3: only act on a validated IP, never let an upstream-supplied DNS token reach the shell */
 					fp = fopen("/tmp/resolv.conf", "a");
 					if(fp) {
 						fprintf(fp, "nameserver %s\n", wan_dns);
@@ -1861,7 +1861,7 @@ void mtwan_append_s46_resolvconf_ipv4(int wan_unit)
 			strlcpy(wan_dns_buf, nvram_pf_safe_get(wan_prefix, "xdns"), sizeof(wan_dns_buf));
 			if (wan_dns_buf[0]) {
 				foreach (wan_dns, wan_dns_buf, next_dns) {
-					if (doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) {
+					if (is_valid_ip(wan_dns) > 0 && doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) { /* hardening H3: only act on a validated IP, never let an upstream-supplied DNS token reach the shell */
 						fp = fopen("/tmp/resolv.conf", "a");
 						if(fp) {
 							fprintf(fp, "nameserver %s\n", wan_dns);

@@ -256,7 +256,9 @@ int ntp_main(int argc, char *argv[])
 #endif
 			if(strcmp(server, DEFAULT_NTP_SERVER)) //customer setting
 			{
-				ret = doSystem("nslookup %s &> /dev/null", server);
+				/* hardening M7: server is nvram-set (ntp_server0/1); only run the
+				 * DNS lookup for a valid hostname/IP so it can't inject a shell command. */
+				ret = (is_valid_hostname(server) || is_valid_ip(server) > 0) ? doSystem("nslookup %s &> /dev/null", server) : -1;
 				if (ret == 0)
 				_eval(args, NULL, 0, &pid);
 				strlcpy(server, DEFAULT_NTP_SERVER, sizeof(server));
@@ -276,7 +278,7 @@ int ntp_main(int argc, char *argv[])
 				strlcpy(server, nvram_safe_get("ntp_server0"), sizeof(server));
 			}
 		} else {
-			ret = doSystem("nslookup %s &> /dev/null", server);
+			ret = (is_valid_hostname(server) || is_valid_ip(server) > 0) ? doSystem("nslookup %s &> /dev/null", server) : -1; /* hardening M7: validate nvram ntp server before shell lookup */
 			if (ret == 0)
 			_eval(args, NULL, 0, &pid);
 

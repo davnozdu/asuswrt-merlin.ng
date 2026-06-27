@@ -403,7 +403,7 @@ void mtwan_append_s46_resolvconf_ipv6(int wan_unit)
 	case WAN_OCNVC:
 		strlcpy(wan_dns_buf, nvram_safe_get(ipv6_nvname_by_unit("ipv6_get_dns", wan_unit)), sizeof(wan_dns_buf));
 		foreach (wan_dns, wan_dns_buf, next_dns) {
-			if (doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) {
+			if (is_valid_ip(wan_dns) > 0 && doSystem("cat /tmp/resolv.conf | grep %s", wan_dns)) { /* hardening H4: only act on a validated IP, never let an upstream-supplied DNS token reach the shell */
 				fp = fopen("/tmp/resolv.conf", "a");
 				if(fp) {
 					fprintf(fp, "nameserver %s\n", wan_dns);

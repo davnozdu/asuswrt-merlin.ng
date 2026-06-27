@@ -3445,6 +3445,27 @@ start_write_smb_conf(void)
 	system("/sbin/write_smb_conf");
 }
 
+/* hardening (H7): escape a string for safe inclusion *inside double quotes* in
+ * a /bin/sh command line. Backslash-escapes \ " $ and ` so a Samba account name
+ * or password containing $(...) or `...` cannot inject commands via system().
+ * The previous str_escape_quotes()/suit_double_quote() left $ and ` active. */
+static void shell_dquote_escape(char *dst, const char *src, int dst_sz)
+{
+	int w = 0;
+	if(dst_sz <= 0)
+		return;
+	for(; src && *src != '\0' && w < dst_sz - 1; src++){
+		char c = *src;
+		if(c=='\\' || c=='"' || c=='$' || c=='`'){
+			if(w + 2 > dst_sz - 1)
+				break;
+			dst[w++] = '\\';
+		}
+		dst[w++] = c;
+	}
+	dst[w] = '\0';
+}
+
 void
 start_samba(void)
 {
@@ -3548,12 +3569,12 @@ start_samba(void)
 		memset(char_user, 0, 64);
 		ascii_to_char_safe(char_user, follow_account->name, 64);
 		memset(suit_user, 0, 64);
-		suit_double_quote(suit_user, char_user, 64);
+		shell_dquote_escape(suit_user, char_user, 64); /* hardening H7 */
 
 		memset(char_passwd, 0, 64);
 		ascii_to_char_safe(char_passwd, follow_account->passwd, 64);
 		memset(suit_passwd, 0, 64);
-		suit_double_quote(suit_passwd, char_passwd, 64);
+		shell_dquote_escape(suit_passwd, char_passwd, 64); /* hardening H7 */
 
 #if defined(RTCONFIG_SAMBA36X)
 		// use samba-3.6.x_opwrt to replace from samba-3.6.x
@@ -3588,7 +3609,7 @@ start_samba(void)
 			memset(char_user, 0, 64);
 			ascii_to_char_safe(char_user, tmp_ascii_user, 64);
 			memset(suit_user, 0, 64);
-			str_escape_quotes(suit_user, char_user, 64);
+			shell_dquote_escape(suit_user, char_user, 64); /* hardening H7 */
 #ifdef RTCONFIG_NVRAM_ENCRYPT
 			char dec_passwd[64];
 			memset(dec_passwd, 0, sizeof(dec_passwd));
@@ -3603,7 +3624,7 @@ start_samba(void)
 #endif
 
 			memset(suit_passwd, 0, 64);
-			str_escape_quotes(suit_passwd, char_passwd, 64);
+			shell_dquote_escape(suit_passwd, char_passwd, 64); /* hardening H7 */
 
 #if defined(RTCONFIG_TUXERA_SMBD)
 			if(st_samba_mode == 2 || st_samba_mode == 4)
