@@ -2490,9 +2490,7 @@ misc_defaults(int restore_defaults)
 	if (strlen(nvram_safe_get("log_wlstat_dir")) &&
 		d_exists(nvram_safe_get("log_wlstat_dir")) &&
 		!strncmp(nvram_safe_get("log_wlstat_dir"), "/jffs", 5)) {
-		char cmd[128];
-		snprintf(cmd, sizeof(cmd), "rm -rf %s", nvram_safe_get("log_wlstat_dir"));
-		system(cmd);
+		eval("rm", "-rf", nvram_safe_get("log_wlstat_dir"));	/* M3: argv exec, no shell-injection via log_wlstat_dir */
 	}
 #endif
 	nvram_unset("wait_httpd");
