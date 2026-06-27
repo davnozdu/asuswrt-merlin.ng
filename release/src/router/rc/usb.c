@@ -2232,7 +2232,7 @@ int mount_partition(char *dev_name, int host_num, char *dsc_name, char *pt_name,
 done:
 	if (ret == MOUNT_VAL_RONLY || ret == MOUNT_VAL_RW)
 	{
-		chmod(mountpoint, 0777);
+		chmod(mountpoint, 0775);	/* L3: drop world-write on the auto-mounted volume root (keep owner/group write for sharing daemons) */
 
 		char usb_node[32], port_path[8];
 		char prefix[] = "usb_pathXXXXXXXXXXXXXXXXX_", tmp[100];
@@ -3794,7 +3794,7 @@ int find_dms_dbdir_candidate(char *dbdir)
 	return found;
 }
 
-void find_dms_dbdir(char *dbdir)
+void find_dms_dbdir(char *dbdir, size_t dbdir_sz)
 {
 	char dbdir_t[128], dbfile[128];
 	int found=0;
@@ -3805,20 +3805,20 @@ void find_dms_dbdir(char *dbdir)
 	if(!strcmp(dbdir_t, nvram_default_get("dms_dbdir"))) {
 		snprintf(dbfile, sizeof(dbfile), "%s/file.db", dbdir_t);
 		if (check_if_file_exist(dbfile)) {
-			strcpy(dbdir, dbdir_t);
+			strlcpy(dbdir, dbdir_t, dbdir_sz);	/* M5: bound to caller buffer */
 			found = 1;
 		}
 	}
 
 	/* find the first write-able directory */
 	if(!found && find_dms_dbdir_candidate(dbdir_t)) {
-		sprintf(dbdir, "%s/.minidlna", dbdir_t);
+		snprintf(dbdir, dbdir_sz, "%s/.minidlna", dbdir_t);	/* M5 */
 		found = 1;
 	}
 
  	/* use default dir */
 	if(!found)
-		strcpy(dbdir, nvram_default_get("dms_dbdir"));
+		strlcpy(dbdir, nvram_default_get("dms_dbdir"), dbdir_sz);	/* M5 */
 
 	nvram_set("dms_dbdir", dbdir);
 
@@ -3834,7 +3834,7 @@ void start_dms(void)
 {
 	FILE *f;
 	int port, pid;
-	char dbdir[100];
+	char dbdir[128];	/* M5: was [100]; widened to fit /tmp/mnt/<label>/.minidlna and match find_dms_dbdir bounds */
 	char *argv[] = { MEDIA_SERVER_APP, "-f", "/etc/"MEDIA_SERVER_APP".conf", "-R", NULL, NULL, NULL };
 	static int once = 1;
 	unsigned char ea[ETHER_ADDR_LEN];
@@ -3897,12 +3897,12 @@ void start_dms(void)
 				strdup(nvram_default_get("dms_dir_type_x"));
 
 			memset(dbdir, 0, sizeof(dbdir));
-			find_dms_dbdir(dbdir);
+			find_dms_dbdir(dbdir, sizeof(dbdir));
 
 			if (strlen(dbdir))
 				mkdir_if_none(dbdir);
 			if (!check_if_dir_exist(dbdir)) {
-				strcpy(dbdir, nvram_default_get("dms_dbdir"));
+				strlcpy(dbdir, nvram_default_get("dms_dbdir"), sizeof(dbdir));	/* M5 */
 				mkdir_if_none(dbdir);
 			}
 
@@ -3915,7 +3915,7 @@ void start_dms(void)
 			snprintf(uuid, sizeof(uuid), "4d696e69-444c-164e-9d41-%02x%02x%02x%02x%02x%02x",
 				 ea[0], ea[1], ea[2], ea[3], ea[4], ea[5]);
 
-			friendly_name = nvram_get("dms_friendly_name");
+			friendly_name = nvram_safe_get("dms_friendly_name");	/* H8: nvram_get() may return NULL -> deref crash */
 			if (*friendly_name == '\0' || !is_valid_hostname(friendly_name))
 				friendly_name = get_lan_hostname();
 
