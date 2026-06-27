@@ -393,10 +393,10 @@ get_wsec(wsec_info_t *info, unsigned char *mac, char *osifname)
 	memcpy(info->ea, mac, ETHER_ADDR_LEN);
 	/* ssid */
 	if (wds && wds_wsec)
-		strncpy(info->ssid, wds_ssid, MAX_SSID_LEN);
+		strlcpy(info->ssid, wds_ssid, sizeof(info->ssid));	/* M18: ensure NUL-term */
 	else {
 		value = nvram_safe_get(strlcat_r(wl_prefix, "ssid", comb, sizeof(comb)));
-		strncpy(info->ssid, value, MAX_SSID_LEN);
+		strlcpy(info->ssid, value, sizeof(info->ssid));		/* M18 */
 	}
 	/* auth */
 	if (nvram_match(strlcat_r(wl_prefix, "auth", comb, sizeof(comb)), "1"))

@@ -597,10 +597,10 @@ get_wsec(wsec_info_t *info, unsigned char *mac, char *osifname)
 	memcpy(info->ea, mac, ETHER_ADDR_LEN);
 	/* ssid */
 	if (wds && wds_wsec)
-		strncpy(info->ssid, wds_ssid, MAX_SSID_LEN);
+		strlcpy(info->ssid, wds_ssid, sizeof(info->ssid));	/* M18: ensure NUL-term */
 	else {
 		value = nvram_safe_get(strlcat_r(wl_prefix, "ssid", comb, sizeof(comb)));
-		strncpy(info->ssid, value, MAX_SSID_LEN);
+		strlcpy(info->ssid, value, sizeof(info->ssid));		/* M18 */
 	}
 	/* auth */
 	if (nvram_match(strlcat_r(wl_prefix, "auth", comb, sizeof(comb)), "1"))
@@ -982,6 +982,8 @@ int wl_wlif_block_mac(void *hdl, char *ifname, struct ether_addr addr, int timeo
 
 	if (timeout != 0) {
 		data = (static_maclist_t *) malloc(sizeof(static_maclist_t));
+		if (data == NULL)	/* M17: malloc may fail */
+			return FALSE;
 		strncpy(data->ifname, ifname, IFNAMSIZ - 1);
 		data->ifname[IFNAMSIZ - 1] = '\0';
 		data->flag = flag;
@@ -1466,11 +1468,13 @@ wl_wlif_save_wpa_settings(char *type, char *val, wlif_wps_nw_creds_t *creds)
 	} else if (strstr(type, "ssid")) {
 		len = strlen(val) > (WLIF_SSID_MAX_SZ + 1) ? WLIF_SSID_MAX_SZ + 1 : strlen(val);
 		strncpy(creds->ssid, val + 1, sizeof(creds->ssid) -1);
-		creds->ssid[len - 2 /* for " at the start and end of string */]  = '\0';
+		creds->ssid[sizeof(creds->ssid) - 1] = '\0';
+		creds->ssid[(len >= 2) ? (len - 2) : 0] = '\0';	/* H13: avoid creds->ssid[-1]/[-2] on empty/short value */
 	} else if (strstr(type, "psk")) {
 		len = strlen(val) > (WLIF_PSK_MAX_SZ + 1) ? WLIF_PSK_MAX_SZ + 1 : strlen(val);
 		strncpy(creds->nw_key, val + 1, sizeof(creds->nw_key) -1);
-		creds->nw_key[len - 2 /* for " at the start and end of string */] = '\0';
+		creds->nw_key[sizeof(creds->nw_key) - 1] = '\0';
+		creds->nw_key[(len >= 2) ? (len - 2) : 0] = '\0';	/* H13 */
 	} else if (strstr(type, "key_mgmt")) {
 		if (strstr(val, "WPA-PSK")) {
 			creds->akm |= WLIF_WPA_AKM_PSK;
