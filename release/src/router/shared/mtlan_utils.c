@@ -971,9 +971,13 @@ char* get_vpns_iprange_by_vpns_idx(int vpns_idx, char* buf, size_t len)
 				char *p, *p_end;
 				nvram_safe_get_r("ipsec_profile_1", ipsec_prof, sizeof(ipsec_prof));
 				p = strpbrk(ipsec_prof, ">");
-				while (ipsec_vsubnet_idx--)
+				while (p && ipsec_vsubnet_idx--)	/* H12: stop on NULL instead of deref'ing p+1 */
 					p = strpbrk(p+1, ">");
+				if (!p)
+					continue;		/* malformed/short ipsec_profile_1 */
 				p_end = strpbrk(p+1, ">");
+				if (!p_end)
+					continue;
 				*p_end = '\0';
 				snprintf(buf, len, "%s.1-%s.254", p+1, p+1);
 				ret = 1;
@@ -1238,7 +1242,7 @@ CP_LOCAL_AUTH *get_cp_localauth_bytype(CP_LOCAL_AUTH *lst, int index, int type)
 	if((type == 1) || (type == 2)){
 		//free wifi 
 		memset(buf_f, '\0', sizeof(buf_f));
-		strncpy(buf_f, nvram_safe_get(pf), sizeof(buf_f));
+		strlcpy(buf_f, nvram_safe_get(pf), sizeof(buf_f));	/* H14: strncpy left buf_f unterminated on >=128-byte nvram */
 		char *temp = strtok(buf_f," < ");
 		while(temp)
 		{
@@ -1304,7 +1308,7 @@ int mtlan_extend_prefix_by_subnet_idx(const char* prefix, int prefix_length, uin
 	int n = 0;
 	int i;
 
-	if (inet_pton(AF_INET6, prefix, addr) < 0)
+	if (inet_pton(AF_INET6, prefix, addr) != 1)	/* L4: inet_pton returns 0 for malformed, never <0 */
 		return 0;
 	if (subnet_length != 8 && subnet_length != 16)
 		return 0;
@@ -1320,7 +1324,7 @@ int mtlan_extend_prefix_by_subnet_idx(const char* prefix, int prefix_length, uin
 		addr[i] |= subnet[i];
 	}
 
-	if (inet_ntop(AF_INET6, addr, buf, len) < 0)
+	if (inet_ntop(AF_INET6, addr, buf, len) == NULL)	/* L4: inet_ntop returns NULL on failure, not <0 */
 		return 0;
 
 	return ((n+1)*8);
