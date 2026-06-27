@@ -2695,7 +2695,7 @@ ej_dump(int eid, webs_t wp, int argc, char_t **argv)
 				, nvram_safe_get("dsllog_fwver")
 				, nvram_safe_get("fb_comment")
 				);
-			ret += websWrite(wp, buf);
+			ret += websWrite(wp, "%s", buf);	/* M11: buf holds attacker-set fb_* nvram; not a format string */
 		}
 	}
 #else /* RTCONFIG_DSL */
@@ -2737,7 +2737,7 @@ ej_dump(int eid, webs_t wp, int argc, char_t **argv)
 				, nvram_safe_get("firmver"), nvram_safe_get("buildno"), nvram_safe_get("extendno")
 				, nvram_safe_get("fb_comment")
 				);
-			ret += websWrite(wp, buf);
+			ret += websWrite(wp, "%s", buf);	/* M11: buf holds attacker-set fb_* nvram; not a format string */
 		}
 	}
 #endif /* RTCONFIG_DSL */
@@ -12711,7 +12711,7 @@ ftpServerTree_cgi(webs_t wp, char_t *urlPrefix, char_t *webDir, int arg,
 		return 0;
 	}
 	else
-		websWrite(wp,buf);
+		websWrite(wp,"%s",buf);	/* M10: buf is helper reply driven by request 'path'; never a format string */
 
 	return 0;
 }
@@ -15409,8 +15409,12 @@ int inc_uploadImg(FILE * stream, int *len, uint32 *imageLen)
                 }
 
 		if(strncmp(buf, "------", 6) == 0) {
+			size_t blen = strlen(buf);
+			if (blen >= sizeof(boundary))		/* H2: clamp so strncpy can't overflow boundary[] */
+				blen = sizeof(boundary) - 1;
 			memset(boundary, 0, sizeof(boundary));
-			strncpy(boundary, buf, strlen(buf));
+			strncpy(boundary, buf, blen);
+			boundary[blen] = '\0';
 			boundaryLen = strlen(buf) - 2;
 		}
 
@@ -32296,7 +32300,7 @@ void ej_cgi_get(int eid, webs_t wp, int argc, char **argv)
 
 	for (i = 0; i < argc; ++i) {
 		v = get_cgi(argv[i]);
-		if (v) ret += websWrite(wp, v);
+		if (v) ret += websWrite(wp, "%s", v);	/* C8: never use request data as a format string */
 	}
 }
 
