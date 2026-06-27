@@ -2583,7 +2583,6 @@ int scan_upnpclist(char *filename, upnpc_list_t target, char *output_duration, i
 
 void add_upnp_port(int type)
 {
-	char cmd[256] = {0};
 	char protocol[4] = "UDP";
 	char duration[16] = "86400"; //You can set it "86400000" if you want.
 	char prefix[16] = {0};
@@ -2621,13 +2620,22 @@ void add_upnp_port(int type)
 	snprintf(target.extPort, sizeof(target.extPort), "%d", nvram_get_int("ipsec_isakmp_ext_port"));
 	snprintf(target.intPort, sizeof(target.intPort), "%d", nvram_get_int("ipsec_isakmp_port"));
 
-	snprintf(cmd, sizeof(cmd), "miniupnpc-new -m %s -i -a %s %d %d %s %s", wan_ifname, wan_ipaddr, nvram_get_int("ipsec_isakmp_port"), nvram_get_int("ipsec_isakmp_ext_port"), protocol, duration);
-	system(cmd);
-	snprintf(cmd, sizeof(cmd), "miniupnpc-new -m %s -i -a %s %d %d %s %s", wan_ifname, wan_ipaddr, nvram_get_int("ipsec_nat_t_port"), nvram_get_int("ipsec_nat_t_ext_port"), protocol, duration);
-	system(cmd);
+	{
+		char isakmp_port[8], isakmp_ext[8], natt_port[8], natt_ext[8];
+		/* hardening (N3): issue the UPnP-IGD requests via eval() argv so the
+		 * WAN-derived interface/IP and the nvram-set duration can never be
+		 * parsed as a shell command. */
+		snprintf(isakmp_port, sizeof(isakmp_port), "%d", nvram_get_int("ipsec_isakmp_port"));
+		snprintf(isakmp_ext,  sizeof(isakmp_ext),  "%d", nvram_get_int("ipsec_isakmp_ext_port"));
+		snprintf(natt_port,   sizeof(natt_port),   "%d", nvram_get_int("ipsec_nat_t_port"));
+		snprintf(natt_ext,    sizeof(natt_ext),    "%d", nvram_get_int("ipsec_nat_t_ext_port"));
 
-	snprintf(cmd, sizeof(cmd), "miniupnpc-new -m eth0 -i -f %s", UPNPC_OUTPUT_FILE);
-	system(cmd);
+		eval("miniupnpc-new", "-m", wan_ifname, "-i", "-a", wan_ipaddr,
+		     isakmp_port, isakmp_ext, protocol, duration);
+		eval("miniupnpc-new", "-m", wan_ifname, "-i", "-a", wan_ipaddr,
+		     natt_port, natt_ext, protocol, duration);
+		eval("miniupnpc-new", "-m", "eth0", "-i", "-f", UPNPC_OUTPUT_FILE);
+	}
 
 	r = scan_upnpclist(UPNPC_OUTPUT_FILE, target, NULL, 0);
 	if(r == 1)
@@ -3319,7 +3327,13 @@ static void _ipsec_updown_host_net_cli(int unit)
 				fp = fopen("/tmp/route_tmp", "r");
 				if(fp) {
 					while(fgets(buf, sizeof(buf), fp)) {
-						snprintf(cmd, sizeof(cmd), "ip route add %s table %s ", trim_r(buf), table_str);
+						trim_r(buf);
+						/* hardening (N4): the route line is normally just IPs/
+						 * ifnames, but it still reaches a shell via system() -
+						 * skip any line bearing shell metacharacters. */
+						if (buf[strcspn(buf, ";|&$`\\<>()\n\r\"'")] != '\0')
+							continue;
+						snprintf(cmd, sizeof(cmd), "ip route add %s table %s ", buf, table_str);
 						//_dprintf("[%s]\n", cmd);
 						system(cmd);
 					}
@@ -3429,6 +3443,15 @@ static void _get_my_ip_by_subnet(const char* subnet, char *ip, size_t len, int v
 	strlcpy(network, subnet, sizeof(network));
 	if ((p = strchr(network, '/')) != NULL) {
 		*p = '\0';
+	}
+
+	/* hardening (N4): 'network' is interpolated unquoted into a grep shell
+	 * pipeline and derives from nvram IPsec-profile subnets. Require a strict
+	 * IP/host token so a crafted subnet cannot inject commands. */
+	if (!ipsec_token_is_strict(network)) {
+		if (ip && len)
+			ip[0] = '\0';
+		return;
 	}
 
 	if (v6) {
