@@ -1054,7 +1054,7 @@ void rc_ipsec_cert_import(char *asus_cert, char *ipsec_cli_cert,
                           char *ipsec_cli_key, char *pks12)
 {
     char p_file[SZ_MIN];
-    char in_path[SZ_BUF], out_path[SZ_BUF], pwd_path[SZ_BUF], pw_arg[SZ_BUF];
+    char in_path[SZ_BUF], out_path[SZ_BUF], pwd_path[SZ_BUF], pw_arg[SZ_BUF + 8]; /* +8: "file:" prefix room */
     char *pwd = NULL;
     FILE *fp = NULL;
     size_t base_len, i;
@@ -1134,7 +1134,7 @@ void rc_ipsec_cert_import(char *asus_cert, char *ipsec_cli_cert,
 
 void rc_ipsec_ca_export(char *verify_pwd)
 {
-    char pwd_path[SZ_BUF], pass_arg[SZ_BUF];
+    char pwd_path[SZ_BUF], pass_arg[SZ_BUF + 8]; /* +8: "file:" prefix room */
     FILE *fp = NULL;
 
     if(NULL == verify_pwd)
