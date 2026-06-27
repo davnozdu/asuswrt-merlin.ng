@@ -166,17 +166,25 @@ void dbg(const char * format, ...)
 char *
 fd2str(int fd)
 {
-	char *buf = NULL;
-	size_t count = 0, n;
+	char *buf = NULL, *nbuf;
+	size_t count = 0;
+	ssize_t n;	/* M14: was size_t, so a read() error (-1) was never detected and count wrapped */
 
 	do {
-		buf = realloc(buf, count + 512);
+		nbuf = realloc(buf, count + 512);
+		if (nbuf == NULL) {
+			free(buf);
+			buf = NULL;
+			break;
+		}
+		buf = nbuf;
 		n = read(fd, buf + count, 512);
 		if (n < 0) {
 			free(buf);
 			buf = NULL;
+			break;
 		}
-		count += n;
+		count += (size_t)n;
 	} while (n == 512);
 
 	close(fd);
@@ -2200,10 +2208,11 @@ char *enc_str(char *str, char *enc_buf)
 char *dec_str(char *ec_str, char *dec_buf)
 {
         unsigned char buf[DATA_WORDS_LEN + 1];
+        size_t n = strnlen(ec_str, DATA_WORDS_LEN);	/* M13: don't read past a short source (the +1 byte was discarded anyway) */
 
         memset(buf, 0, sizeof(buf));
         memset(dec_buf, 0, DATA_WORDS_LEN);
-        memcpy(buf, ec_str, DATA_WORDS_LEN+1);
+        memcpy(buf, ec_str, n);
         buf[DATA_WORDS_LEN] = 0;
         shortstr_decrypt(buf, (unsigned char *) dec_buf, used_shift);
 
