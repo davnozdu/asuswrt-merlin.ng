@@ -49,7 +49,10 @@
 char*
 strncpy_n(char *destination, const char *source, size_t num)
 {
-	char *ret = strncpy(destination, source, num - 1);
+	char *ret;
+	if (num == 0)			/* M12: avoid num-1 wrapping to SIZE_MAX and destination[-1] */
+		return destination;
+	ret = strncpy(destination, source, num - 1);
 	destination[num - 1] = '\0';
 	return ret;
 }
@@ -153,6 +156,10 @@ get_hex_data(uchar *data_str, uchar *hex_data, int len)
 	uchar val;
 	int idx;
 	char hexstr[3] = {0};
+	int avail = (int)(strlen((char*)data_str) / 2);	/* M15: don't read past the source */
+
+	if (len > avail)
+		len = avail;
 
 	src = data_str;
 	dest = hex_data;
