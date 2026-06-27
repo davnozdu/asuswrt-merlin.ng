@@ -261,7 +261,7 @@ set_autofw_port(int which, const netconf_app_t *app)
 	/* Set description */
 	if (*app->desc) {
 		cur = safe_snprintf(cur, &len, ",");
-		cur = safe_snprintf(cur, &len, app->desc);
+		cur = safe_snprintf(cur, &len, "%s", app->desc); /* hardening H10: desc is the format, not data */
 	}
 
 	/* Do it */
@@ -450,7 +450,7 @@ set_forward_port(int which, const netconf_nat_t *nat)
 	/* Set description */
 	if (*nat->desc) {
 		cur = safe_snprintf(cur, &len, ",");
-		cur = safe_snprintf(cur, &len, nat->desc);
+		cur = safe_snprintf(cur, &len, "%s", nat->desc); /* hardening H10: desc is the format, not data */
 	}
 
 	/* Do it */
@@ -759,7 +759,7 @@ set_filter_client(int which, const netconf_filter_t *start, const netconf_filter
 	/* Set description */
 	if (*start->desc) {
 		cur = safe_snprintf(cur, &len, ",");
-		cur = safe_snprintf(cur, &len, start->desc);
+		cur = safe_snprintf(cur, &len, "%s", start->desc); /* hardening H10: desc is the format, not data */
 	}
 
 	/* Do it */
@@ -912,7 +912,7 @@ set_filter_url(int which, const netconf_urlfilter_t *start, const netconf_urlfil
 	/* Set description */
 	if (*start->desc) {
 		cur = safe_snprintf(cur, &len, ",");
-		cur = safe_snprintf(cur, &len, start->desc);
+		cur = safe_snprintf(cur, &len, "%s", start->desc); /* hardening H10: desc is the format, not data */
 	}
 
 	/* Do it */
@@ -1191,38 +1191,46 @@ get_wds_wsec(int unit, int which, char *mac, char *role,
 	value[sizeof(value) - 1] = '\0';
 	next = value;
 
+	/* hardening (C5): bound every copy out of the wlN_wdsM nvram value so a
+	 * crafted token cannot overflow the caller's fixed buffers. The sizes match
+	 * the WDS field semantics and the caller contract:
+	 * mac[18] role[8] crypto[16] auth[16] ssid[48] psk[80]. */
+
 	/* separate mac */
-	strcpy(mac, strsep(&next, ","));
+	strlcpy(mac, strsep(&next, ","), 18);
 	if (!next)
 		return FALSE;
 
 	/* separate role */
-	strcpy(role, strsep(&next, ","));
+	strlcpy(role, strsep(&next, ","), 8);
 	if (!next)
 		return FALSE;
 
 	/* separate crypto */
-	strcpy(crypto, strsep(&next, ","));
+	strlcpy(crypto, strsep(&next, ","), 16);
 	if (!next)
 		return FALSE;
 
 	/* separate auth */
-	strcpy(auth, strsep(&next, ","));
+	strlcpy(auth, strsep(&next, ","), 16);
 	if (!next)
 		return FALSE;
 
 	if (!strcmp(auth, "psk")) {
 		va_list va;
+		char *ssid_buf, *psk_buf;
 
 		va_start(va, auth);
 
 		/* separate ssid */
-		strcpy(va_arg(va, char *), strsep(&next, ","));
+		ssid_buf = va_arg(va, char *);
+		strlcpy(ssid_buf, strsep(&next, ","), 48);
 		if (!next)
 			goto fail;
 
 		/* separate passphrase */
-		strcpy(va_arg(va, char *), next);
+		psk_buf = va_arg(va, char *);
+		strlcpy(psk_buf, next, 80);
 
 		va_end(va);
 		return TRUE;
