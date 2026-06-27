@@ -200,9 +200,15 @@ opt_get(const void *buf, size_t size, unsigned char id)
 
 #ifdef RTCONFIG_TR069
 static char
-*stropt(const struct opt_hdr *opt, char *buf)
+*stropt(const struct opt_hdr *opt, char *buf, size_t bufsz)
 {
-	*stpncpy(buf, (char *)opt->data, opt->len) = '\0';
+	size_t n = opt->len;
+	if (bufsz == 0)
+		return buf;
+	if (n > bufsz - 1)		/* H5: clamp attacker-controlled opt->len (0-255) to dest size */
+		n = bufsz - 1;
+	memcpy(buf, (char *)opt->data, n);
+	buf[n] = '\0';
 	return buf;
 }
 
@@ -541,7 +547,7 @@ _dprintf("%s(%d): ifunit=%d, if=%s.\n", __func__, getpid(), ifunit, wan_ifname);
 		struct opt_hdr *opt;
 		char buf[256], *url = NULL, *userinfo, *host, *path, *ptr, *user, *pass;
 		if ((opt = opt_get(value, size, 1)) &&
-		    (ptr = strstr(stropt(opt, buf), "://")) && ptr > buf)
+		    (ptr = strstr(stropt(opt, buf, sizeof(buf)), "://")) && ptr > buf)
 			url = trim_r(buf);
 		else if ((ptr = strstr(value, "://")) && ptr > value)
 			url = trim_r(value);
@@ -574,8 +580,8 @@ _dprintf("%s(%d): ifunit=%d, if=%s.\n", __func__, getpid(), ifunit, wan_ifname);
 			free(userinfo);
 		}
 		if ((opt = opt_get(value, size, 2))) {
-			//nvram_set(strcat_r(wanprefix, "tr_pvgcode", tmp), stropt(opt, buf));
-			nvram_set("pvgcode", stropt(opt, buf));
+			//nvram_set(strcat_r(wanprefix, "tr_pvgcode", tmp), stropt(opt, buf, sizeof(buf)));
+			nvram_set("pvgcode", stropt(opt, buf, sizeof(buf)));
 		}
 		free(value);
 	}
@@ -590,10 +596,10 @@ _dprintf("%s(%d): ifunit=%d, if=%s.\n", __func__, getpid(), ifunit, wan_ifname);
 			char vivso[6 + 64 + 64 + 3];
 			char *ptr = vivso;
 			char *end = ptr + sizeof(vivso);
-			ptr += snprintf(ptr, end - ptr, "%s,", stropt(oui, tmp));
-			ptr += snprintf(ptr, end - ptr, "%s,", stropt(serial, tmp));
+			ptr += snprintf(ptr, end - ptr, "%s,", stropt(oui, tmp, sizeof(tmp)));
+			ptr += snprintf(ptr, end - ptr, "%s,", stropt(serial, tmp, sizeof(tmp)));
 			if ((class = opt_get(viopt->data, viopt->len, 6)))
-				ptr += snprintf(ptr, end - ptr, "%s", stropt(class, tmp));
+				ptr += snprintf(ptr, end - ptr, "%s", stropt(class, tmp, sizeof(tmp)));
 			nvram_set("vivso", vivso);
 		}
 		free(value);
@@ -1303,10 +1309,10 @@ bound_lan(void)
 			char vivso[6 + 64 + 64 + 3];
 			char *ptr = vivso;
 			char *end = ptr + sizeof(vivso);
-			ptr += snprintf(ptr, end - ptr, "%s,", stropt(oui, tmp));
-			ptr += snprintf(ptr, end - ptr, "%s,", stropt(serial, tmp));
+			ptr += snprintf(ptr, end - ptr, "%s,", stropt(oui, tmp, sizeof(tmp)));
+			ptr += snprintf(ptr, end - ptr, "%s,", stropt(serial, tmp, sizeof(tmp)));
 			if ((class = opt_get(viopt->data, viopt->len, 6)))
-				ptr += snprintf(ptr, end - ptr, "%s", stropt(class, tmp));
+				ptr += snprintf(ptr, end - ptr, "%s", stropt(class, tmp, sizeof(tmp)));
 			nvram_set("vivso", vivso);
 		}
 		free(value);
