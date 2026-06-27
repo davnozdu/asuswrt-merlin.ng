@@ -13302,7 +13302,7 @@ apply_cgi(webs_t wp, char_t *urlPrefix, char_t *webDir, int arg,
 		if(!strcmp(current_url, "Main_Netstat_Content.asp") && (
 			strncasecmp(system_cmd, "netstat", 7) == 0
 		)){
-			strncpy(SystemCmd, system_cmd, sizeof(SystemCmd));
+			strlcpy(SystemCmd, system_cmd, sizeof(SystemCmd));	/* L5: ensure NUL-term */
 		}
 		else if(!strcmp(current_url, "Main_Analysis_Content.asp") && (
 			   strncasecmp(system_cmd, "ping", 4) == 0
@@ -13360,10 +13360,10 @@ apply_cgi(webs_t wp, char_t *urlPrefix, char_t *webDir, int arg,
 					snprintf(tmp, sizeof(tmp), "-i %s", wan);
 				snprintf(SystemCmd, sizeof(SystemCmd), "%s %s %s", system_cmd, tmp, p + 1);
 			} else {
-				strncpy(SystemCmd, system_cmd, sizeof(SystemCmd));
+				strlcpy(SystemCmd, system_cmd, sizeof(SystemCmd));	/* L5: ensure NUL-term */
 			}
 #else
-			strncpy(SystemCmd, system_cmd, sizeof(SystemCmd));
+			strlcpy(SystemCmd, system_cmd, sizeof(SystemCmd));	/* L5: ensure NUL-term */
 #endif
 		}
 		else if(!strcmp(current_url, "Main_WOL_Content.asp") && (
@@ -13391,7 +13391,7 @@ apply_cgi(webs_t wp, char_t *urlPrefix, char_t *webDir, int arg,
 #endif
 #endif
 
-			strncpy(SystemCmd, system_cmd, sizeof(SystemCmd));
+			strlcpy(SystemCmd, system_cmd, sizeof(SystemCmd));	/* L5: ensure NUL-term */
 #if defined(XD4S) || defined(RTCONFIG_MT798X)
 			strcat(SystemCmd," -b");
 #endif			

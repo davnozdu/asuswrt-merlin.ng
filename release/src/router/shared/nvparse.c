@@ -810,7 +810,7 @@ get_filter_url(int which, netconf_urlfilter_t *start, netconf_urlfilter_t *end)
 	snprintf(name, sizeof(name), "filter_url%d", which);
 	if (!nvram_invmatch(name, ""))
 		return FALSE;
-	strncpy(value, nvram_get(name), sizeof(value));
+	strlcpy(value, nvram_safe_get(name), sizeof(value));	/* M19: nvram_safe_get (no NULL deref) + guaranteed NUL-term */
 
 	/* Check for URL */
 	url = value;

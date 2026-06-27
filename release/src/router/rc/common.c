@@ -1936,14 +1936,21 @@ int remove_ip_rules(const int pref, const int v6)
 {
 	char tmp[256], pref_str[8], tmp2[256];
 	FILE *fp;
-	static const char iprule_tmp[] = "/tmp/iprule_tmp";
+	char iprule_tmp[] = "/tmp/iprule_tmp.XXXXXX";	/* M9: unique file (mkstemp, O_EXCL) instead of a predictable, symlink-raceable path */
+	int fd;
 
+	(void)tmp2;
 	// remove current default routing table
 	snprintf(pref_str, sizeof(pref_str), "%d", pref);
+
+	fd = mkstemp(iprule_tmp);
+	if (fd < 0)
+		return -1;
+
 	snprintf(tmp, sizeof(tmp), "ip %s rule show | grep %d > %s", (v6)?"-6":"-4", pref, iprule_tmp);
 
 	system(tmp);
-	fp = fopen(iprule_tmp, "r");
+	fp = fdopen(fd, "r");
 	if(fp)
 	{
 		while(fgets(tmp, sizeof(tmp), fp))
@@ -1952,6 +1959,8 @@ int remove_ip_rules(const int pref, const int v6)
 		}
 		fclose(fp);
 	}
+	else
+		close(fd);
 	unlink(iprule_tmp);
 	return 0;
 }

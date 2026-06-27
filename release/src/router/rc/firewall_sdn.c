@@ -832,6 +832,24 @@ static int _convert_url_to_hex(const char *url, char *output, const size_t outpu
 	return -1;
 }
 
+/* L1: a URL-filter keyword is emitted verbatim into iptables --url/--string "..."
+ * rules (written to an iptables-restore file and, for IPv6, an ip6tables doSystem).
+ * Reject the characters that could close the quoting, run a shell, or inject an
+ * extra rule line, so a crafted keyword can't tamper with the firewall ruleset. */
+static int _urlf_keyword_safe(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++) {
+		unsigned char c = (unsigned char)*s;
+		if (c < 0x20 || c == 0x7f)	/* control chars / CR / LF */
+			return 0;
+		if (c == '"' || c == '\\' || c == '`' || c == '$')
+			return 0;
+	}
+	return 1;
+}
+
 #ifdef RTCONFIG_IPV6
 static int _write_UrlFilter(const MTLAN_T *pmtl, const URLF_PF *urlf_pf, const char *chain, const char *ifname, const char *ip, const char *logdrop, FILE *fp, FILE *fp_ipv6)
 #else
@@ -901,7 +919,7 @@ static int _write_UrlFilter(const MTLAN_T *pmtl, const URLF_PF *urlf_pf, const c
 							snprintf(srcips, sizeof(srcips), "-m iprange --src-range %s", srcAddr);
 					}
 
-					if (rule->url)
+					if (rule->url && _urlf_keyword_safe(rule->url))	/* L1: drop keywords with quote/shell/newline metachars */
 					{
 						if (!strcmp(chain, URL_FILTER_FORWARD_CHAIN) && !urlf_pf->mode)
 						{

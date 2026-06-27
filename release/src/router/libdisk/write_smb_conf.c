@@ -479,8 +479,8 @@ int main(int argc, char *argv[])
 	fprintf(fp, "wide links = no\n"); 		// ASUS add
 	fprintf(fp, "bind interfaces only = yes\n");	// ASUS add
 
-	snprintf(br0_ll, "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_LINKLOCAL) ? : "");
-	snprintf(br0_unicast, "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, 0) ? : "");
+	snprintf(br0_ll, sizeof(br0_ll), "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_LINKLOCAL) ? : "");	/* M6: was missing size arg */
+	snprintf(br0_unicast, sizeof(br0_unicast), "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, 0) ? : "");	/* M6 */
 
 	if (strlen(br0_ll))
 		snprintf(br0_ll_str, sizeof(br0_ll_str), "%s%%%s/%d", br0_ll, nvram_safe_get("lan_ifname"), ipv6_prefix_len(nvram_safe_get("lan_ifname")));
@@ -528,7 +528,7 @@ int main(int argc, char *argv[])
 	else
 		br0_ll_allow[0] = '\0';
 
-	snprintf(br0_unicast_prefix, "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_PREFIX) ? : "");
+	snprintf(br0_unicast_prefix, sizeof(br0_unicast_prefix), "%s", getifaddr(nvram_safe_get("lan_ifname"), AF_INET6, GIF_PREFIX) ? : "");	/* M6 */
 	if (strlen(br0_unicast_prefix))
 		sprintf(br0_unicast_allow, "%s/%d", br0_unicast_prefix, ipv6_prefix_len(nvram_safe_get("lan_ifname")));
 	else
