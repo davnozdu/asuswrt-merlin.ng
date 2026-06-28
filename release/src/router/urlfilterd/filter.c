@@ -99,7 +99,7 @@ int get_url_info()
 	return 0;
 }
 
-static int updateOffset(uint8_t isIPv4, const char *data_p)
+static int updateOffset(uint8_t isIPv4, const char *data_p, int data_len)
 {
 	const struct tcphdr *tcp;
 	int payload_offset;
@@ -113,6 +113,8 @@ static int updateOffset(uint8_t isIPv4, const char *data_p)
 		const struct iphdr *iph;
 
 		iph = (const struct iphdr *)data_p;
+		if (iph->ihl < 5 || ((iph->ihl<<2) + (int)sizeof(struct tcphdr)) > data_len)
+			return -1;
 		tcp = (const struct tcphdr *)(data_p + (iph->ihl<<2));
 		payload_offset = ((iph->ihl)<<2) + (tcp->doff<<2);
 
@@ -135,8 +137,12 @@ static int updateOffset(uint8_t isIPv4, const char *data_p)
 
 		do
 		{
+			if (payload_offset + (int)sizeof(struct ip6_ext) > data_len)
+				return -1;
 			if ( nextHdr == IPPROTO_TCP )
 			{
+					if (payload_offset + (int)sizeof(struct tcphdr) > data_len)
+						return -1;
 					tcp = (struct tcphdr *)ip_ext_p;
 					payload_offset += tcp->doff << 2;
 
@@ -160,6 +166,7 @@ static int pkt_decision(struct nfq_data * payload)
 {
 	char *data;
 	char *match, *folder, *url;
+	char httpbuf[1500];
 	PURL current;
 	int payload_offset, data_len;
 	struct iphdr *iph;
@@ -180,15 +187,28 @@ static int pkt_decision(struct nfq_data * payload)
 
 	iph = (struct iphdr *)data;
 	isIPv4 = (iph->version == 4)?1:0;
-	payload_offset = updateOffset(isIPv4, data);
+	if (data_len < (int)sizeof(struct iphdr))
+		return PKT_ACCEPT;
 
-	if (payload_offset < 0)
+	payload_offset = updateOffset(isIPv4, data, data_len);
+
+	if (payload_offset < 0 || payload_offset >= data_len)
 	{
 		/* always accept the packet if error happens */
 		return PKT_ACCEPT;
 	}
 
-	match = (char *)(data + payload_offset);
+	/* The NFQUEUE payload is not NUL-terminated.  Copy the HTTP portion into a
+	 * bounded, terminated buffer so the strstr() scans cannot read past the
+	 * captured packet (URLF-1/URLF-2). */
+	{
+		int avail = data_len - payload_offset;
+		if (avail > (int)sizeof(httpbuf) - 1)
+			avail = sizeof(httpbuf) - 1;
+		memcpy(httpbuf, data + payload_offset, avail);
+		httpbuf[avail] = '\0';
+	}
+	match = httpbuf;
 
 	if(strstr(match, "GET ") == NULL && strstr(match, "POST ") == NULL && strstr(match, "HEAD ") == NULL)
 	{

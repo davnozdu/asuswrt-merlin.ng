@@ -335,8 +335,15 @@ int accept_igmp(unsigned char *packet, int size, unsigned char *shost, int loopb
 	if (ptr > end - sizeof(*iph) ||
 	    iph->ip_p != IPPROTO_IGMP)
 		return 0;
+	/* bound the IP header length against the captured packet: ip_hl<5 is illegal,
+	 * and an over-long ihl or a small ip_len could push ptr past end and make the
+	 * unsigned (end - ptr) below underflow, bypassing every size check. */
+	if (iph->ip_hl < 5 || ptr + (iph->ip_hl << 2) > end)
+		return 0;
 	ptr += iph->ip_hl << 2;
 	end = MIN(end, (unsigned char *) iph + ntohs(iph->ip_len));
+	if (ptr > end)
+		return 0;
 
 	igmp.igmp = (struct igmp *) ptr;
 	igmp_len = end - ptr;
@@ -368,6 +375,11 @@ int accept_igmp(unsigned char *packet, int size, unsigned char *shost, int loopb
 			if (ptr > end - sizeof(*grec))
 				break;
 			nsrcs = ntohs(grec->grec_nsrcs);
+			/* ensure the full record (8-byte header + nsrcs sources + aux data)
+			 * lies within the packet before reading grec_mca or advancing ptr;
+			 * nsrcs/grec_auxwords are attacker-controlled length fields. */
+			if ((unsigned char *) &grec->grec_src[nsrcs] + grec->grec_auxwords * 4 > end)
+				break;
 			switch (grec->grec_type) {
 			case IGMP3_ALLOW_NEW_SOURCES:
 				if (nsrcs == 0)

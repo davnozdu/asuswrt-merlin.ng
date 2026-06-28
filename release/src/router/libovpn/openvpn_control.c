@@ -261,6 +261,40 @@ void ovpn_client_down_handler(int unit)
 }
 
 
+/* hardening: validate VPN-server-pushed tokens before they reach ip(8) argv
+ * or a config file.  network/netmask/gateway/metric/trusted_ip/route_* and the
+ * foreign-option DOMAIN all come from getenv() populated by the remote OpenVPN
+ * server, so they are fully attacker-controlled. */
+static int ovpn_str_is_num(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++)
+		if (!isdigit((unsigned char)*s))
+			return 0;
+	return 1;
+}
+
+static int ovpn_dev_valid(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++)
+		if (!isalnum((unsigned char)*s))
+			return 0;
+	return 1;
+}
+
+static int ovpn_domain_safe(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++)
+		if (!(isalnum((unsigned char)*s) || *s == '.' || *s == '-' || *s == '_'))
+			return 0;
+	return 1;
+}
+
 void ovpn_client_up_handler(int unit)
 {
 	char buffer[128];
@@ -339,13 +373,22 @@ void ovpn_client_up_handler(int unit)
 				break;
 
 			if ( (inet_pton(AF_INET, network_env, &network) == 1)
-			    && (inet_pton(AF_INET, netmask_env, &netmask) == 1)) {
-
-				snprintf(buffer, sizeof (buffer),"/usr/sbin/ip route add %s/%s via %s dev %s %s %s table ovpnc%d",
-			                network_env, netmask_env, gateway_env, dev_env, (metric_env ? "metric" : ""), (metric_env ? metric_env : ""), unit);
+			    && (inet_pton(AF_INET, netmask_env, &netmask) == 1)
+			    && (inet_pton(AF_INET, gateway_env, &network) == 1)
+			    && ovpn_dev_valid(dev_env)
+			    && (!metric_env || ovpn_str_is_num(metric_env)) ) {
+				char destbuf[40], tablebuf[16];
+				snprintf(destbuf, sizeof(destbuf), "%s/%s", network_env, netmask_env);
+				snprintf(tablebuf, sizeof(tablebuf), "ovpnc%d", unit);
+				if (metric_env && *metric_env)
+					eval("/usr/sbin/ip", "route", "add", destbuf, "via", gateway_env,
+					     "dev", dev_env, "metric", metric_env, "table", tablebuf);
+				else
+					eval("/usr/sbin/ip", "route", "add", destbuf, "via", gateway_env,
+					     "dev", dev_env, "table", tablebuf);
 				if (verb >= 3)
-					logmessage("openvpn-routing","Add pushed route: %s", buffer);
-				system(buffer);
+					logmessage("openvpn-routing","Add pushed route: %s via %s dev %s table %s",
+					           destbuf, gateway_env, dev_env, tablebuf);
 			}
 		}
 
@@ -362,24 +405,29 @@ void ovpn_client_up_handler(int unit)
 			remote_env = getenv("trusted_ip");
 			localgw = getenv("route_net_gateway");
 
-			if (remote_env && localgw) {
-				snprintf(buffer, sizeof (buffer), "/usr/sbin/ip route add %s/32 via %s table ovpnc%d",
-					remote_env, localgw, unit);
+			if (remote_env && localgw
+			    && inet_pton(AF_INET, remote_env, &network) == 1
+			    && inet_pton(AF_INET, localgw, &netmask) == 1) {
+				char destbuf[40], tablebuf[16];
+				snprintf(destbuf, sizeof(destbuf), "%s/32", remote_env);
+				snprintf(tablebuf, sizeof(tablebuf), "ovpnc%d", unit);
+				eval("/usr/sbin/ip", "route", "add", destbuf, "via", localgw, "table", tablebuf);
 				if (verb >= 6)
-					logmessage("openvpn-routing", "Add route to remote endpoint: %s", buffer);
-				system(buffer);
+					logmessage("openvpn-routing", "Add route to remote endpoint: %s via %s", destbuf, localgw);
 			} else {
-				logmessage("openvpn-routing", "Missing remote IP or local gateway - cannot configure route");
+				logmessage("openvpn-routing", "Missing/invalid remote IP or local gateway - cannot configure route");
 			}
 
 			// Use VPN as default gateway
 			remotegw_env = getenv("route_vpn_gateway");
-			if (remotegw_env) {
-				snprintf(buffer, sizeof (buffer), "/usr/sbin/ip route replace default via %s dev %s table ovpnc%d",
-				         remotegw_env, dev_env, unit);
+			if (remotegw_env && ovpn_dev_valid(dev_env)
+			    && inet_pton(AF_INET, remotegw_env, &network) == 1) {
+				char tablebuf[16];
+				snprintf(tablebuf, sizeof(tablebuf), "ovpnc%d", unit);
+				eval("/usr/sbin/ip", "route", "replace", "default", "via", remotegw_env,
+				     "dev", dev_env, "table", tablebuf);
 				if (verb >= 3)
 					logmessage("openvpn-routing","Setting client %d routing table's default route through the tunnel", unit);
-				system(buffer);
 			} else {
 				logmessage("openvpn-routing","WARNING: no VPN gateway provided, routing might not work properly!");
 			}
@@ -447,7 +495,7 @@ void ovpn_client_up_handler(int unit)
 				option2 = getenv(buffer);
 				if (!option2)
 					break;
-				if (!strncmp(option2, "dhcp-option DOMAIN ", 19)) {
+				if (!strncmp(option2, "dhcp-option DOMAIN ", 19) && ovpn_domain_safe(&option2[19])) {
 					fprintf(fp_resolv, "server=/%s/%s\n", &option2[19], &option[16]);
 				}
 			}

@@ -185,6 +185,14 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 		}
 
 		/* append to the whole name */
+		/* bound this label (length + data) against the received packet so the
+		 * strncat() below and the pointer advance cannot run past in[inlen-1] */
+		if (in_name_p + 1 + *in_name_p >= in + inlen) {
+			DEBUG(1, L, "llmnr: label exceeds packet bounds");
+			free(in_name);
+			return -1;
+		}
+
 		in_name_len += *in_name_p + (*in_name ? 1 : 0); // '.' if not first
 
 		in_name = (char *) realloc(in_name, in_name_len + 1);
@@ -214,6 +222,12 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	 * this implementation only supports questions of type A
 	 * or AAAA
 	 */
+	/* qtype/qclass occupy in_name_p[1..4]; ensure they lie within the packet */
+	if (in_name_p + 5 > in + inlen) {
+		DEBUG(1, L, "llmnr: question section truncated");
+		free(in_name);
+		return -1;
+	}
 	qtype = in_name_p[1] * 256 + in_name_p[2];
 	if (qtype != DNS_TYPE_ANY && qtype != DNS_TYPE_A && qtype != DNS_TYPE_AAAA) {
 		DEBUG(1, L, "llmnr: record in question not of type ANY or A or AAAA: %#x", qtype);

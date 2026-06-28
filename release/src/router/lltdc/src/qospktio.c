@@ -555,16 +555,28 @@ qos_probe(void)
             /* Add the rcv timestamp from the global save area */
             cpy_hton64(&qprb_hdr->probe_rxstamp, &g_pktio_timestamp);
 
-            /* Copy the payload */
-            memcpy(&qprb_hdr->probe_payload, &g_qprb_hdr->probe_payload,
-                   g_rcvd_pkt_len - (((uint8_t*)&g_qprb_hdr->probe_payload) - g_txbuf));
+            /* Copy the payload.  The payload offset must be measured against the
+             * RX buffer that g_qprb_hdr points into (NOT g_txbuf); using g_txbuf
+             * yields a wrong, size_t-underflowing length and an out-of-bounds
+             * write.  Also bound the copy so a crafted frame cannot run past the
+             * end of g_txbuf. */
+            {
+                size_t rx_off = (uint8_t*)&g_qprb_hdr->probe_payload - g_rxbuf;
+                size_t tx_off = (uint8_t*)&qprb_hdr->probe_payload - g_txbuf;
+                if (g_rcvd_pkt_len > rx_off && g_rcvd_pkt_len <= RXBUFSZ) {
+                    size_t payload_len = g_rcvd_pkt_len - rx_off;
+                    if (payload_len > (size_t)TXBUFSZ - tx_off)
+                        payload_len = (size_t)TXBUFSZ - tx_off;
+                    memcpy(&qprb_hdr->probe_payload, &g_qprb_hdr->probe_payload, payload_len);
+                }
+            }
 
             /* Add the rtx timestamp just before sending */
             get_timestamp(&g_pktio_timestamp);
             cpy_hton64(&qprb_hdr->probe_rtxstamp, &g_pktio_timestamp);
 
             /* and return the packet (4 bytes longer due to tags) - do not save in re_txbuf! */
-            tx_write(g_txbuf, g_rcvd_pkt_len+4);
+            tx_write(g_txbuf, (g_rcvd_pkt_len + 4 <= TXBUFSZ) ? g_rcvd_pkt_len + 4 : TXBUFSZ);
 
             IF_TRACED(TRC_PACKET)
                 dbgprintf("qos_probegap: reflecting, with 802.1p priority of: %d, seq=%d -> " ETHERADDR_FMT "\n",

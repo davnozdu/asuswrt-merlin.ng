@@ -134,6 +134,53 @@ void write_ovpn_client_dnsmasq_config(FILE* dnsmasq_conf) {
 	}
 }
 
+/* hardening helpers: nvram-derived tokens that flow into a sed/shell command,
+ * a filename, or an OpenVPN config directive.  Restrict each to a character set
+ * that cannot break out of that context (no quotes, slashes, newlines, $, ;). */
+static int ovpn_host_safe(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++) {
+		if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z') ||
+		      (*s >= '0' && *s <= '9') || *s == '.' || *s == '-'))
+			return 0;
+	}
+	return 1;
+}
+
+static int ovpn_ipv4_safe(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++)
+		if (!((*s >= '0' && *s <= '9') || *s == '.'))
+			return 0;
+	return 1;
+}
+
+static int ovpn_cname_safe(const char *s)
+{
+	if (!s || !*s || strstr(s, ".."))
+		return 0;
+	for (; *s; s++) {
+		if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z') ||
+		      (*s >= '0' && *s <= '9') || *s == '.' || *s == '-' || *s == '_'))
+			return 0;
+	}
+	return 1;
+}
+
+static int ovpn_x509name_safe(const char *s)
+{
+	if (!s)
+		return 0;
+	for (; *s; s++)
+		if (*s == '"' || *s == '\\' || *s == '\n' || *s == '\r')
+			return 0;
+	return 1;
+}
+
 char *get_ovpn_remote_address(char *buf, int len) {
 	const char *address;
 	char hostname[64];
@@ -169,7 +216,7 @@ void update_ovpn_profie_remote()
 	for (unit = 1; unit <= OVPN_SERVER_MAX; unit++) {
 		snprintf(file_path, sizeof(file_path), "/etc/openvpn/server%d/client.ovpn", unit);
 		if (f_exists(file_path)) {
-			snprintf(buffer, sizeof(buffer), "sed -i 's/remote [A-Za-z0-9.-]*/remote %s/ ' %s", get_ovpn_remote_address(address, sizeof(address)), file_path);
+			snprintf(buffer, sizeof(buffer), "sed -i 's/remote [A-Za-z0-9.-]*/remote %s/ ' %s", (ovpn_host_safe(get_ovpn_remote_address(address, sizeof(address))) ? address : "0.0.0.0"), file_path);
 			system(buffer);
 		}
 	}
@@ -405,6 +452,12 @@ int ovpn_write_server_config(ovpn_sconf_t *sconf, int unit) {
 				continue;
 			}
 
+			/* hardening: cname becomes a filename in the ccd dir (reject path
+			 * traversal); addr/netmask become route/iroute directives (require
+			 * clean IPv4 text so a newline can't inject an arbitrary directive). */
+			if (!ovpn_cname_safe(cname) || !ovpn_ipv4_safe(addr) || !ovpn_ipv4_safe(netmask))
+				continue;
+
 			fp_ccd = fopen(cname, "a");
 			chmod(cname, S_IRUSR|S_IWUSR);
 
@@ -625,7 +678,7 @@ int ovpn_write_client_config(ovpn_cconf_t *cconf, int unit) {
 			fprintf(fp, "key client.key\n");
 	}
 
-	if (cconf->verify_x509_type) {
+	if (cconf->verify_x509_type && ovpn_x509name_safe(cconf->verify_x509_name)) {
 		fprintf(fp, "verify-x509-name \"%s\" ",  cconf->verify_x509_name);
 		switch(cconf->verify_x509_type) {
 			case 1:
