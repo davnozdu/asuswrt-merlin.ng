@@ -145,13 +145,14 @@ static int get_backup_db_path_by_datetime(const char* db_name, const char* db_ve
 
     while (pch_db_version!=NULL) {
 
-        char file_name[40] = "\0";
+        char file_name[64] = "\0";
 
-        sprintf(file_name, "%lu_%s_%s.db", timestamp_day, db_name, pch_db_version);
+        /* bounded build: db_name/db_version may originate from an HTTP query,
+         * and the old strncpy/strncat used source lengths (not dest space) into
+         * a MAX_FILE_PATH(125) buffer -> overflow.  Use sized snprintf. */
+        snprintf(file_name, sizeof(file_name), "%lu_%s_%s.db", timestamp_day, db_name, pch_db_version);
 
-        strncpy(db_file_path, db_bakcup_path, strlen(db_bakcup_path));
-        strncat(db_file_path, "/", 1);
-        strncat(db_file_path, file_name, strlen(file_name));
+        snprintf(db_file_path, MAX_FILE_PATH, "%s/%s", db_bakcup_path, file_name);
 
         if (access(db_file_path, F_OK)==0) {
             // fprintf(stdout, "find it(db_file_path=%s)!!\n", db_file_path);

@@ -262,7 +262,7 @@ void get_meter_file(char *meter_buf)
 #ifdef CONFIG_BCMWL5 
 	FILE *fp;
         if (fp=fopen(ISP_METER_FILE, "r")) {
-                fgets(meter_buf, sizeof(meter_buf), fp);
+                fgets(meter_buf, 64, fp);
                 fclose(fp);
 	}
 #else
@@ -283,7 +283,7 @@ int set_meter_file(char *meter_buf)
                fclose(fp);
 	}
 #else
-	FWrite(meter_buf, RA_OFFSET_ISP_METER, sizeof(meter_buf));
+	FWrite(meter_buf, RA_OFFSET_ISP_METER, 64);
 #endif
 	return 1;
 }

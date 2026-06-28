@@ -168,6 +168,9 @@ int main(int argc, char **argv) {
 		if (ch != 1) continue;
 		/* main loop of challenge-response authorization */
 		while(1) {
+			/* zero before each read so a short/partial server reply can't leave
+			 * stale bytes that auth1()/auth2() then hash via challenge[0]. */
+			memset(challenge, 0, sizeof(challenge));
 			if (!tmread(challenge, sizeof(challenge), 240)) {
 				close(sock);
 				if (curlevel == 0xff) sleep(5);

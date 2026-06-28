@@ -707,6 +707,21 @@ read_config_file (const char *file, int unit)
 	return ret;
 }
 
+/* The OpenVPN status file holds the connecting client's chosen username and
+ * addresses; they are written space-delimited into client_status and later
+ * rendered by the web UI.  Replace anything that isn't a safe printable token
+ * char (and the space delimiter) so a client can't corrupt the record or feed
+ * markup downstream. */
+static void ovpn_status_clean(char *s)
+{
+	for (; s && *s; s++) {
+		unsigned char c = (unsigned char)*s;
+		if (c < 0x21 || c > 0x7e || c == '<' || c == '>' ||
+		    c == '"' || c == '\'' || c == '&' || c == '%')
+			*s = '_';
+	}
+}
+
 void parse_openvpn_status(int unit)
 {
 	FILE *fpi, *fpo;
@@ -736,6 +751,7 @@ void parse_openvpn_status(int unit)
 
 				while ((token = strsep(&bufPtr, ","))) {
 					field++;
+					ovpn_status_clean(token);
 					if (field == 3) {		// Real Address
 						if(*token)
 							fprintf(fpo, "%s ", token);

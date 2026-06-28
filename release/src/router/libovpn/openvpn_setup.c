@@ -1386,6 +1386,10 @@ char* ovpn_generate_client_key(ovpn_type_t type, int unit, char *buffer, int len
 	ovpn_get_runtime_filename(OVPN_TYPE_SERVER, unit, OVPN_SERVER_STATIC, server_key_file, sizeof(server_key_file));
 
 	snprintf(client_key_file, sizeof(client_key_file), "/tmp/ovpn_client_key_%d", unit);
+	/* predictable /tmp path holds a tls-crypt-v2 secret; drop any pre-planted
+	 * file/symlink so a local user can't redirect or pre-seed it before openvpn
+	 * writes (and we read) the key. */
+	unlink(client_key_file);
 
 	if (eval("openvpn", "--tls-crypt-v2", server_key_file, "--genkey", "tls-crypt-v2-client", client_key_file) != 0) {
 		logmessage("openvpn", "Failed to generate tls-crypt-v2 client key for server %d", unit);
