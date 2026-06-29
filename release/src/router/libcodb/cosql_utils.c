@@ -311,6 +311,23 @@ static int is_valid_text(const char* input)
 	return FORMAT_OK;
 }
 
+/* Strict SQL identifier check: a bare column/table identifier must be [A-Za-z_][A-Za-z0-9_]*.
+ * is_valid_text() permits ()%|,= and spaces, which is unsafe for an identifier emitted raw
+ * into SELECT/SUM/AVG (sub-query injection). Use this wherever a value becomes a bare identifier. */
+static int is_valid_sql_identifier(const char* s)
+{
+	int i;
+	if (!s || !*s)
+		return FORMAT_ERROR;
+	if (!(isalpha((unsigned char)s[0]) || s[0]=='_'))
+		return FORMAT_ERROR;
+	for (i=0; s[i]; i++) {
+		if (!(isalnum((unsigned char)s[i]) || s[i]=='_'))
+			return FORMAT_ERROR;
+	}
+	return FORMAT_OK;
+}
+
 static int is_valid_text_mac(const char* input) 
 {
 	if(!input) {
@@ -1965,7 +1982,7 @@ int cosql_get_column_values(sqlite3* pdb,
 	for (i=0; i<query_columns_count; i++) {
 		char *column_name = query_columns->name;
 
-		if (column_name!=NULL && strlen(column_name)>0) {
+		if (column_name!=NULL && strlen(column_name)>0 && is_valid_sql_identifier(column_name)==FORMAT_OK) {
 
 			if (strlen(sql_column_names)>0) {
 				strncat(sql_column_names, ",", 1);
@@ -2221,18 +2238,22 @@ int cosql_get_last_xth_double_value(sqlite3* pdb,
 	return COSQL_OK;
 }
 
-int cosql_sum_between_time(sqlite3* pdb, 
-	int match_and_columns_count, sql_column_match_t* match_and_columns, 
-	int match_or_columns_count, sql_column_match_t* match_or_columns, 
-	const char* column_name, 
-	int start_data_time, int end_data_time, 
-	double* ret_value) 
+int cosql_sum_between_time(sqlite3* pdb,
+	int match_and_columns_count, sql_column_match_t* match_and_columns,
+	int match_or_columns_count, sql_column_match_t* match_or_columns,
+	const char* column_name,
+	int start_data_time, int end_data_time,
+	double* ret_value)
 {
 	if (pdb == NULL) {
 		return COSQL_ERROR;
 	}
 
 	if (strlen(column_name)==0) {
+		return COSQL_ERROR;
+	}
+
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* column_name -> raw SELECT SUM(%s) identifier; reject injection */
 		return COSQL_ERROR;
 	}
 
@@ -2315,14 +2336,18 @@ int cosql_avg_between_time(sqlite3* pdb,
 	int match_and_columns_count, sql_column_match_t* match_and_columns, 
 	int match_or_columns_count, sql_column_match_t* match_or_columns,
 	const char* column_name, 
-	int start_data_time, int end_data_time, 
-	double* ret_value) 
+	int start_data_time, int end_data_time,
+	double* ret_value)
 {
 	if (pdb == NULL) {
 		return COSQL_ERROR;
 	}
 
 	if (strlen(column_name)==0) {
+		return COSQL_ERROR;
+	}
+
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* column_name -> raw SELECT AVG(%s) identifier; reject injection */
 		return COSQL_ERROR;
 	}
 
@@ -2404,14 +2429,18 @@ int cosql_avg_between_time(sqlite3* pdb,
 int cosql_sum_latest_count_limit(sqlite3* pdb, 
 	int match_and_columns_count, sql_column_match_t* match_and_columns, 
 	int match_or_columns_count, sql_column_match_t* match_or_columns,
-	const char* column_name, int latest_count_limit, 
-	double* ret_value) 
+	const char* column_name, int latest_count_limit,
+	double* ret_value)
 {
 	if (pdb == NULL) {
 		return COSQL_ERROR;
 	}
 
 	if (strlen(column_name)==0) {
+		return COSQL_ERROR;
+	}
+
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* column_name -> raw SELECT SUM(%s) identifier; reject injection */
 		return COSQL_ERROR;
 	}
 
@@ -2495,10 +2524,10 @@ int cosql_sum_latest_count_limit(sqlite3* pdb,
 	return COSQL_OK;
 }
 
-int cosql_avg_latest_count_limit(sqlite3* pdb, 
-	int match_and_columns_count, sql_column_match_t* match_and_columns, 
-	int match_or_columns_count, sql_column_match_t* match_or_columns, 
-	const char* column_name, int latest_count_limit, 
+int cosql_avg_latest_count_limit(sqlite3* pdb,
+	int match_and_columns_count, sql_column_match_t* match_and_columns,
+	int match_or_columns_count, sql_column_match_t* match_or_columns,
+	const char* column_name, int latest_count_limit,
 	double* ret_value)
 {
 
@@ -2507,6 +2536,10 @@ int cosql_avg_latest_count_limit(sqlite3* pdb,
 	}
 
 	if (strlen(column_name)==0) {
+		return COSQL_ERROR;
+	}
+
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* column_name -> raw SELECT AVG(%s) identifier; reject injection */
 		return COSQL_ERROR;
 	}
 

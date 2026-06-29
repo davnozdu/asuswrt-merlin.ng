@@ -631,7 +631,7 @@ int codb_content_query_json_field(char* db_name, int columns_count, char* column
                 
                 pdb_backup = cosql_open(find_backup_db_file_path);
                 if (pdb_backup!=NULL) {
-                    strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                    snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                     codbg("Open backup_db_file_path=%s", backup_db_file_path);
                 }
             }
@@ -858,7 +858,7 @@ int codb_latest_content_query_json_field(char* db_name, int columns_count, char*
                     
                     pdb_backup = cosql_open(find_backup_db_file_path);
                     if (pdb_backup!=NULL) {
-                        strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                        snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                         codbg("Open backup_db_file_path=%s", backup_db_file_path);
                     }
                 }
@@ -1043,7 +1043,7 @@ int codb_content_query_duration_json_field(char* db_name, int columns_count, cha
                 
                 pdb_backup = cosql_open(find_backup_db_file_path);
                 if (pdb_backup!=NULL) {
-                    strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                    snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                     fprintf(stderr, "Open backup_db_file_path=%s\n", backup_db_file_path);
                 }
             }
@@ -1214,7 +1214,7 @@ int codb_avg_query_json_field(char* db_name, char* field_name, char* node_mac, i
 
                     pdb_backup = cosql_open(find_backup_db_file_path);
                     if (pdb_backup!=NULL) {
-                        strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                        snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                         fprintf(stderr, "Open backup_db_file_path=%s\n", backup_db_file_path);
                     }
                 }
@@ -1379,7 +1379,7 @@ int codb_eth_detect_traffic_data(char* node_mac, int is_bh, int start, int end, 
 
                     pdb_backup = cosql_open(find_backup_db_file_path);
                     if (pdb_backup!=NULL) {
-                        strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                        snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                         fprintf(stderr, "Open backup_db_file_path=%s\n", backup_db_file_path);
                     }
                 }
@@ -1673,7 +1673,7 @@ int codb_count_active_client(char* node_mac, int start, int end, int duration, j
 
                 pdb_backup = cosql_open(find_backup_db_file_path);
                 if (pdb_backup!=NULL) {
-                    strncpy(backup_db_file_path, find_backup_db_file_path, strlen(find_backup_db_file_path));
+                    snprintf(backup_db_file_path, sizeof(backup_db_file_path), "%s", find_backup_db_file_path);	/* dest-bounded, always NUL-terminated */
                     fprintf(stderr, "open backup_db_file_path=%s\n", backup_db_file_path);
                 }
             }
