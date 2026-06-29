@@ -1784,6 +1784,8 @@ void start_dnsmasq(void)
 
 	/* lan domain */
 	value = nvram_safe_get("lan_domain");
+	if (*value && !is_valid_domainname(value))	// reject newline/metachars -> dnsmasq directive injection
+		value = "";
 	if (*value) {
 		fprintf(fp, "domain=%s\n"
 			    "expand-hosts\n", value);	// expand hostnames in hosts file
@@ -1920,6 +1922,8 @@ void start_dnsmasq(void)
 
 		/* LAN Domain */
 		value = nvram_safe_get("lan_domain");
+		if (*value && !is_valid_domainname(value))	// reject newline/metachars -> dnsmasq directive injection
+			value = "";
 		if (*value)
 			fprintf(fp, "dhcp-option=lan,15,%s\n", value);
 
@@ -2103,12 +2107,15 @@ void start_dnsmasq(void)
 			/* DNS server per client */
 			nv = nvp = strdup(nvram_safe_get("yadns_rulelist"));
 			while (nv && (b = strsep(&nvp, "<")) != NULL) {
+				char mac_buf[18];
 				if (vstrsep(b, ">", &name, &mac, &mode, &enable) < 3)
 					continue;
 				if (enable && atoi(enable) == 0)
 					continue;
 				if (!*mac || !*mode || !ether_atoe(mac, ea))
 					continue;
+				ether_etoa(ea, mac_buf);	// canonical MAC (prevent dnsmasq config injection via trailing bytes)
+				mac = mac_buf;
 				dnsmode = atoi(mode);
 				/* Skip incorrect and default levels */
 				if (dnsmode < YADNS_FIRST || dnsmode >= YADNS_COUNT || dnsmode == defmode)
@@ -2142,6 +2149,8 @@ void start_dnsmasq(void)
 
 		/* LAN Domain */
 		value = nvram_safe_get("lan_domain");
+		if (*value && !is_valid_domainname(value))	// reject newline/metachars -> dnsmasq directive injection
+			value = "";
 		if (*value)
 			fprintf(fp, "dhcp-option=lan,option6:24,%s\n", value);
 #if defined(RTCONFIG_IPV6) && (defined(RTAX82_XD6) || defined(RTAX82_XD6S) || defined(XD6_V2) || defined(ET12))
@@ -4850,6 +4859,7 @@ void write_static_leases(FILE *fp)
 
 	/* Parsing dhcp_staticlist nvram variable. */
 	while ((b = strsep(&nvp, "<")) != NULL) {
+		char mac_buf[18];
 		dns = NULL;
 		hostname = NULL;
 		if ((vstrsep(b, ">", &mac, &ip, &dns, &hostname) < 2))
@@ -4857,6 +4867,8 @@ void write_static_leases(FILE *fp)
 
 		if (!ether_atoe(mac, ea))
 			continue;
+		ether_etoa(ea, mac_buf);	// ether_atoe accepts trailing bytes (incl. newline); re-emit canonical MAC to prevent dnsmasq config injection
+		mac = mac_buf;
 
 		if (dns) {
 			struct in_addr in4;
@@ -5015,6 +5027,23 @@ ddns_updated_main(int argc, char *argv[])
 	return 0;
 }
 
+/* ddns_hostname_x reaches inadyn.conf unquoted.  libconfuse treats whitespace as a
+ * separator, so a space is as dangerous as a newline there: "a.com checkip-command = 'x'"
+ * on one line is two settings.  Reject whitespace, control characters and everything
+ * libconfuse or the shell give meaning to, and '/' because the value is also used as a
+ * cache file name.  Names the GUI accepts today (letters, digits, . - _ and the odd
+ * '*', '@' or ',') still pass. */
+static int ddns_hostname_safe(const char *host)
+{
+	const unsigned char *p;
+
+	for (p = (const unsigned char *) host; *p; p++) {
+		if (*p <= ' ' || *p == 0x7f || strchr("'\"`\\=#{}/$;", *p))
+			return 0;
+	}
+	return 1;
+}
+
 // TODO: handle wan0 only now
 int
 start_ddns(char *caller, int isAidisk)
@@ -5112,6 +5141,12 @@ start_ddns(char *caller, int isAidisk)
 		user = nvram_safe_get("ddns_hostname_x"); /* The username is also the hostname in HE.NET */
 #endif
 	host = nvram_safe_get("ddns_hostname_x");
+	/* host is written unquoted into inadyn.conf (hostname = %s) and into the cache filename;
+	 * inadyn supports checkip-command, so a crafted value would be root command injection. */
+	if (!ddns_hostname_safe(host)) {
+		logmessage(log_title, "Ignoring invalid DDNS hostname");
+		host = "";
+	}
 
 	snprintf(prefix, sizeof(prefix), "wan%d_", unit);
 	wan_ip = nvram_safe_get(strcat_r(prefix, "ipaddr", tmp));
@@ -5724,7 +5759,7 @@ _dprintf("%s: do ez-ipupdate to unregister! unit = %d wan_ifname = %s nserver = 
 			else
 #endif
 				fprintf(fp, "provider %s {\n", "unregister@asus.com");
-			fprintf(fp, "hostname = %s\n", nvram_safe_get("ddns_hostname_x"));
+			fprintf(fp, "hostname = %s\n", ddns_hostname_safe(nvram_safe_get("ddns_hostname_x")) ? nvram_safe_get("ddns_hostname_x") : "");
 			fprintf(fp, "username = '%s'\n", get_ddns_macaddr());
 			fprintf(fp, "password = '%s'\n", nvram_safe_get("secret_code"));
 #ifdef RTCONFIG_GETREALIP
