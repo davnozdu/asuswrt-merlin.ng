@@ -17,6 +17,11 @@ Asuswrt-Merlin 3006.xxx Changelog
  - NEW: "Restart Control D" button on the WAN page (pure restart, saves no
          settings) + a ctrld-restart SSH helper (/usr/sbin/ctrld-restart);
          both run "rc_service restart_ctrld".
+ - BACKPORT (Merlin 3006.102.8, security/packages only, no driver/blob/GPL
+         merges): dnsmasq fix double-free in blockdata_expand(); OpenSSL
+         1.1.1 CVE fixes #891 (5 more from Ubuntu ESM); rc: restart ntpd
+         every 24h. (Most other .8 security fixes - OpenSSL #885, UPnP
+         rule fix, busybox xxd, CA bundle - were already in this base.)
 
 3006.102.8_alpha2-dav1 (xx-Jun-2026)
  - RELEASE: GT-BE98 now builds THREE images from one branch via the CI
