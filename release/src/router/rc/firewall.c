@@ -142,6 +142,37 @@ char *g_buf_alloc(char *g_buf_now)
  * 	0:	non of any DMZ are enabled.
  *  otherwizse:	one or more DMZ are enabled.
  */
+/* Reject rule-list fields emitted raw into iptables-restore lines, to block rule/config
+ * injection via nvram values containing newlines or shell/iptables metacharacters.
+ * _fw_field_safe = strict charset for IP/port/protocol fields;
+ * _fw_keyword_safe = URL/keyword fields (printable, no control/quote/shell chars). */
+static int __attribute__((unused)) _fw_field_safe(const char *s)
+{
+	if (!s || !*s)
+		return 0;
+	for (; *s; s++) {
+		char c = *s;
+		if (!((c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'z') ||
+		      c == '.' || c == ':' || c == ',' || c == '/' || c == '-' || c == '_'))
+			return 0;
+	}
+	return 1;
+}
+
+static int __attribute__((unused)) _fw_keyword_safe(const char *s)
+{
+	if (!s)
+		return 0;
+	for (; *s; s++) {
+		unsigned char c = (unsigned char)*s;
+		if (c < 0x20 || c == 0x7f)		/* control chars incl. CR/LF */
+			return 0;
+		if (c == '"' || c == '\'' || c == '`' || c == '$' || c == '\\')
+			return 0;
+	}
+	return 1;
+}
+
 static inline int dmz_enabled(void)
 {
 	int dmz_enabled = !illegal_ipv4_address(nvram_safe_get("dmz_ip")), dmz1_enabled = 0;
@@ -1494,6 +1525,10 @@ void write_port_forwarding(FILE *fp, char *config, char *chain, char *lan_ip, ch
 				continue;
 			else if (cnt < 6)
 				srcip = "";
+
+			/* dstip/port/lport are emitted raw into iptables-restore lines; reject metachars/newlines */
+			if (!_fw_field_safe(port) || !_fw_field_safe(dstip) || (lport && *lport && !_fw_field_safe(lport)))
+				continue;
 
 			// Handle source type format
 			srcips[0] = '\0';
@@ -3033,6 +3068,7 @@ void write_access_restriction(FILE *fp_ipv4, FILE *fp_ipv6)
 		while (nv && (b = strsep(&nvp, "<")) != NULL) {
 			if ((vstrsep(b, ">", &enable, &srcip, &accessType) != 3)) continue;
 			if (!strcmp(enable, "0")) continue;
+			if (!_fw_field_safe(srcip)) continue;	/* srcip emitted raw into iptables -s; reject metachars/newlines */
 
 			if (strchr(srcip, ':')) {
 				if (fp_ipv6)
@@ -3443,6 +3479,8 @@ void write_UrlFilter(char *chain, char *lan_if, char *lan_ip, char *logdrop, FIL
 			if ((b = strsep(&nvp, "<")) == NULL) break;
 			if ((vstrsep(b, ">", &enable, &addr, &url)) != 3) continue;
 			if (!strcmp(enable, "0"))
+				continue;
+			if (!_fw_keyword_safe(url))	/* url is emitted into quoted iptables args; block quote/shell/newline */
 				continue;
 
 			// Handle source type format
@@ -5751,6 +5789,8 @@ TRACE_PT("writing Parental Control\n");
 				char srciprule[64], dstiprule[64];
 				if ((vstrsep(b, ">", &desc, &srcip, &dstip, &port, &proto) != 5))
 					continue;
+				if ((srcip[0] && !_fw_field_safe(srcip)) || (dstip[0] && !_fw_field_safe(dstip)) || !_fw_field_safe(port))
+					continue;
 				if (srcip[0] != '\0')
 					snprintf(srciprule, sizeof(srciprule), "-s %s", srcip);
 				else
@@ -6117,12 +6157,12 @@ TRACE_PT("write wl filter\n");
 		{
 			if(vstrsep(b, ">", &filterstr) != 1)
 				continue;
-			if(*filterstr)
+			if(*filterstr && _fw_keyword_safe(filterstr))	/* block quote/shell/newline metachars in the keyword */
 			{
 #ifndef HND_ROUTER
 				fprintf(fp, "-I FORWARD -p tcp --sport 80 %s -m string --string \"%s\" --algo bm -j REJECT --reject-with tcp-reset\n", timef, filterstr);
 #else
-				fprintf(fp, "-I FORWARD -p tcp --sport 80 %s -m string --string %s --algo bm -j REJECT --reject-with tcp-reset\n",timef, filterstr);
+				fprintf(fp, "-I FORWARD -p tcp --sport 80 %s -m string --string \"%s\" --algo bm -j REJECT --reject-with tcp-reset\n",timef, filterstr);
 #endif
 
 #ifdef RTCONFIG_IPV6
@@ -6130,7 +6170,7 @@ TRACE_PT("write wl filter\n");
 #ifndef HND_ROUTER
 					fprintf(fp_ipv6, "-I FORWARD -p tcp --sport 80 %s -m string --string \"%s\" --algo bm -j REJECT --reject-with tcp-reset\n", timef, filterstr);
 #else
-					fprintf(fp_ipv6, "-I FORWARD -p tcp --sport 80 %s -m string --string %s --algo bm -j REJECT --reject-with tcp-reset\n", timef, filterstr);
+					fprintf(fp_ipv6, "-I FORWARD -p tcp --sport 80 %s -m string --string \"%s\" --algo bm -j REJECT --reject-with tcp-reset\n", timef, filterstr);
 #endif
 #endif
 			}
@@ -8183,6 +8223,8 @@ write_porttrigger(FILE *fp, char *wan_if, int is_nat)
 		char *p;
 
 		if ((vstrsep(b, ">", &desc, &out_port, &out_proto, &in_port, &in_proto) != 5))
+			continue;
+		if (!_fw_field_safe(out_port) || !_fw_field_safe(in_port))
 			continue;
 
 		if (first) {
