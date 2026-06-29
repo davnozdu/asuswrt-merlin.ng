@@ -2844,12 +2844,12 @@ int start_cake(void)
 	if (ibw == 0)
 		*ibwstr = '\0';
 	else
-		snprintf(ibwstr, sizeof(ibwstr), "bandwidth %dkbit", ibw);
+		snprintf(ibwstr, sizeof(ibwstr), "bandwidth %ukbit", ibw);
 
 	if (obw == 0)
 		*obwstr = '\0';
 	else
-		snprintf(obwstr, sizeof(obwstr), "bandwidth %dkbit", obw);
+		snprintf(obwstr, sizeof(obwstr), "bandwidth %ukbit", obw);
 
 	snprintf(overheadstr, sizeof(overheadstr), "overhead %d mpu %d", nvram_get_int("qos_overhead"), nvram_get_int("qos_mpu"));
 
