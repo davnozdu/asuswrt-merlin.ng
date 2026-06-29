@@ -16059,6 +16059,43 @@ start_ctrld(void)
 	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1; i++)
 		sleep(1);
 
+	/* Hard clock failsafe (post-reboot deadlock breaker). If NTP still hasn't
+	 * set the clock (ntp_ready==0), the system time is stuck near the boot
+	 * epoch (~2010/2024). ctrld's DoH/DoH3 (QUIC) upstream then fails TLS
+	 * certificate validation ("not yet valid") and HANGS on startup without
+	 * ever binding its listener, so dnsmasq's 127.0.0.1#5354 upstream
+	 * black-holes ALL DNS. And because DNS is dead, ntpd can never resolve its
+	 * pool hostname to set the clock -> a permanent deadlock that only a lucky
+	 * boot-race avoided before (observed on hardware 2026-06-29). Break it the
+	 * same way ctrld's bootstrap_ip does: force a one-shot NTP sync against
+	 * IP-literal public servers (Cloudflare + Google anycast) so NO DNS is
+	 * needed. busybox `ntpd -q` exits after the first sync; `timeout` bounds it
+	 * so a down WAN can never stall boot. Once the clock is sane, TLS works and
+	 * ctrld comes up normally. */
+	if (nvram_get_int("ntp_ready") != 1) {
+		system("timeout 20 ntpd -nq "
+		       "-p 162.159.200.123 -p 216.239.35.0 -p 162.159.200.1 "
+		       ">/dev/null 2>&1");
+		if (time(NULL) > 1577836800)	/* clock now past 2020-01-01 -> valid */
+			nvram_set("ntp_ready", "1");
+	}
+
+	/* ROCK-SOLID CLOCK GATE: never launch ctrld with a bogus clock - that is
+	 * exactly what black-holes DNS and deadlocks the box after a reboot. If the
+	 * NTP failsafe above still couldn't set the time (e.g. WAN was momentarily
+	 * down), DEFER: do NOT start ctrld. dnsmasq is already on the normal
+	 * resolver (ctrld isn't running, and start_dnsmasq's 5354 upstream is gated
+	 * on pids("ctrld")), so DNS keeps working and normal NTP can sync. We leave
+	 * the ctrld_check watchdog cron in place; it retries start_ctrld every 3 min
+	 * and, once the clock is valid, ctrld comes up cleanly. Net effect: ctrld
+	 * ALWAYS starts strictly AFTER the clock is correct. */
+	if (time(NULL) <= 1577836800) {
+		logmessage("ctrld", "system clock not set yet (NTP pending); "
+			"deferring Control D start to avoid DNS deadlock, will retry");
+		eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
+		return;
+	}
+
 	/* Control D mode (--cd <resolver_uid>): ctrld authenticates to the Control D
 	 * API with the user's Resolver ID, fetches the FULL profile (all admin-panel
 	 * rules) AND registers as a device, so the Control D dashboard / status page

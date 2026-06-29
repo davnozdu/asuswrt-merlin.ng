@@ -1,0 +1,19 @@
+#!/bin/sh
+# GT-BE98 Control D (ctrld) manual restart helper.
+#
+# Re-runs start_ctrld via rc: kills any running ctrld, regenerates dnsmasq onto
+# the normal resolver, forces an NTP-by-IP clock sync if needed, then relaunches
+# ctrld with the SAVED nvram settings and re-wires dnsmasq -> 127.0.0.1#5354.
+# Use this over SSH when ctrld got stuck (e.g. after a reboot) - it is the same
+# action as the "Restart Control D" button on the WAN page.
+#
+# Usage:  ctrld-restart
+
+if [ "$(nvram get ctrld_enable)" != "1" ]; then
+	echo "Control D is disabled (ctrld_enable=0). Enable it in the GUI first."
+	exit 1
+fi
+
+echo "Restarting Control D (ctrld)..."
+rc rc_service restart_ctrld
+echo "Triggered. Give it ~10s, then check:  ps w | grep ctrld ; nslookup verify.controld.com 127.0.0.1"

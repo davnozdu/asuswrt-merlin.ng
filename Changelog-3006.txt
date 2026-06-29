@@ -1,6 +1,23 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_alpha2-dav15 (29-Jun-2026)
+ - FIXED: GT-BE98 Control D post-reboot DNS deadlock. When NTP had not yet
+         set the clock, ctrld's DoH/DoH3 (QUIC) TLS handshake failed cert
+         validation and ctrld hung on startup without binding :5354, so
+         dnsmasq black-holed all DNS; with DNS dead, NTP could never sync
+         its pool host -> permanent deadlock (only a boot-race avoided it
+         before). start_ctrld() now (a) forces a one-shot NTP sync against
+         IP-literal servers (Cloudflare/Google anycast, no DNS needed) and
+         (b) hard-gates the launch on a valid clock: if the clock is still
+         bogus it DEFERS ctrld (dnsmasq stays on the normal resolver, DNS
+         keeps working) and the 3-min watchdog retries. ctrld now ALWAYS
+         starts strictly after the clock is correct.
+ - CHANGED: baked ctrld updated 1.5.2 -> 1.5.3 (committed arm64 blob).
+ - NEW: "Restart Control D" button on the WAN page (pure restart, saves no
+         settings) + a ctrld-restart SSH helper (/usr/sbin/ctrld-restart);
+         both run "rc_service restart_ctrld".
+
 3006.102.8_alpha2-dav1 (xx-Jun-2026)
  - RELEASE: GT-BE98 now builds THREE images from one branch via the CI
          matrix: two "original" full-featured builds (default, rog, NO

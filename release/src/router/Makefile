@@ -2549,6 +2549,8 @@ ifeq ($(HND_ROUTER_BE_4916),y)
 ifeq ($(CTRLD),y)
 	install -D $(TOP)/ctrld/prebuilt/ctrld $(INSTALLDIR)/usr/sbin/ctrld
 	chmod 755 $(INSTALLDIR)/usr/sbin/ctrld
+	install -D $(TOP)/ctrld/prebuilt/ctrld-restart $(INSTALLDIR)/usr/sbin/ctrld-restart
+	chmod 755 $(INSTALLDIR)/usr/sbin/ctrld-restart
 endif
 endif
 

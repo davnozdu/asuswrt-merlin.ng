@@ -3159,6 +3159,7 @@ function get_default_wan_name(){
 				<th>&nbsp;</th>
 				<td>
 					<input type="button" class="button_gen" onclick="submitCtrld();" value="Apply Control D">
+					<input type="button" class="button_gen" onclick="restartCtrld();" value="Restart Control D">
 					<div id="ctrld_status" style="margin-top:4px;font-size:12px;"></div>
 				</td>
 			</tr>
@@ -3205,6 +3206,13 @@ function get_default_wan_name(){
 	<input type="hidden" name="ctrld_doh3" value="">
 	<input type="hidden" name="ctrld_debug" value="">
 </form>
+<!-- GT-BE98 Control D: pure restart form (re-runs start_ctrld, saves no settings) -->
+<form method="post" name="ctrld_restart_form" action="/start_apply.htm" target="hidden_frame">
+	<input type="hidden" name="current_page" value="Advanced_WAN_Content.asp">
+	<input type="hidden" name="action_mode" value="apply">
+	<input type="hidden" name="action_script" value="restart_ctrld">
+	<input type="hidden" name="action_wait" value="5">
+</form>
 <script>
 function ctrld_init(){
 	if(typeof based_modelid === "undefined" || based_modelid != "GT-BE98") return;
@@ -3235,6 +3243,18 @@ function submitCtrld(){
 	document.getElementById("ctrld_status").innerHTML = en ? "Applying and starting Control D, please wait..." : "Stopping Control D...";
 	document.ctrld_form.submit();
 	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 6000);
+}
+function restartCtrld(){
+	/* Pure restart: re-runs start_ctrld on the router (kills the running ctrld,
+	 * regenerates dnsmasq, relaunches with the SAVED nvram settings). Does NOT
+	 * write any setting, so it works even if ctrld got stuck after a reboot. */
+	if('<% nvram_get("ctrld_enable"); %>' != "1"){
+		alert("Control D is disabled. Enable it and press Apply first.");
+		return;
+	}
+	document.getElementById("ctrld_status").innerHTML = "Restarting Control D, please wait...";
+	document.ctrld_restart_form.submit();
+	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 8000);
 }
 if(window.addEventListener) window.addEventListener("load", ctrld_init, false);
 </script>
