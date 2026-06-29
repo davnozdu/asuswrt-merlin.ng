@@ -4912,6 +4912,21 @@ int validate_apply(webs_t wp, json_object *root)
 					continue;
 				}
 
+				/* Hardened defense-in-depth: QoS bandwidth/type values feed /tmp QoS shell-script
+				 * generation; allow only numeric chars (bandwidth may be fractional Mb/s*1024) so
+				 * shell/newline metacharacters can never reach the generated script. */
+				if((!strcmp(name, "qos_obw") || !strcmp(name, "qos_ibw") ||
+				    !strcmp(name, "qos_obw1") || !strcmp(name, "qos_ibw1")) &&
+				   *value && strspn(value, "0123456789.") != strlen(value)){
+					dbg("reject non-numeric %s=%s\n", name, value);
+					continue;
+				}
+				if(!strcmp(name, "qos_type") && *value &&
+				   (strspn(value, "0123456789") != strlen(value) || atoi(value) > 10)){
+					dbg("reject out-of-range qos_type=%s\n", value);
+					continue;
+				}
+
 				/* log no prefix nvram */
 				nvram_modify_log(name, nvram_safe_get(name), value, activity_obj);
 
@@ -21966,6 +21981,7 @@ login_cgi(webs_t wp, char_t *url, int auth_version)
 #ifdef RTCONFIG_CAPTCHA
 	captcha_t = safe_get_cgi_json("login_captcha", root);
 	l = b64_decode( &(captcha_t[0]), (unsigned char*) captcha_text, sizeof(captcha_text) );
+	if (l >= (int)sizeof(captcha_text)) l = sizeof(captcha_text) - 1;	// b64_decode can return == size; avoid 1-byte OOB NUL write
 	captcha_text[l] = '\0';
 #endif
 
@@ -22025,6 +22041,7 @@ login_cgi(webs_t wp, char_t *url, int auth_version)
 	if(auth_version == HTTPD_AUTH_V1){
 		/* Decode it. */
 		l = b64_decode( &(authorization_t[0]), (unsigned char*) authinfo, sizeof(authinfo) );
+		if (l >= (int)sizeof(authinfo)) l = sizeof(authinfo) - 1;	// b64_decode can return == size; avoid 1-byte OOB NUL write
 		authinfo[l] = '\0';
 
 		authpass = strchr( authinfo, ':' );
