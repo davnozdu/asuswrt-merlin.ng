@@ -16052,30 +16052,31 @@ start_ctrld(void)
 		nvram_commit();
 	}
 
-	/* Wait (bounded) for the clock to be valid before launching: ctrld's
-	 * DoH/DoH3 TLS upstream needs a correct date for cert validation. "Valid" =
-	 * NTP flagged ready OR the system clock is already sane (set manually with
-	 * `date`, or by a prior sync) - so a manual clock fix makes a restart start
-	 * ctrld immediately instead of always burning the full 30s. */
-	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1 && time(NULL) <= 1577836800; i++)
-		sleep(1);
-
-	/* Clock failsafe: if the time is still bogus (NTP couldn't resolve its pool
-	 * host - e.g. the configured upstream DNS is dead, which is what actually
-	 * stalls the clock on this box), force a one-shot sync against IP-literal
-	 * public NTP servers (Cloudflare + Google anycast) so NO DNS is needed.
-	 * `timeout` bounds it so a down WAN can never stall boot. We do NOT gate the
-	 * launch on the result: ctrld is started regardless, because Control D's DoH
-	 * (reached via its bootstrap_ip) may be the ONLY working resolver when the
-	 * configured DNS is dead. DNS can't be black-holed by a still-bad clock
-	 * because we only wire dnsmasq to ctrld AFTER confirming it really binds
-	 * :5354 (see below). */
-	if (nvram_get_int("ntp_ready") != 1 && time(NULL) <= 1577836800) {
-		system("timeout 20 ntpd -nq "
-		       "-p 162.159.200.123 -p 216.239.35.0 -p 162.159.200.1 "
-		       ">/dev/null 2>&1");
-		if (time(NULL) > 1577836800)	/* clock now past 2020-01-01 -> valid */
+	/* Rock-solid clock handling, keyed on NETWORK availability rather than
+	 * guessing whether the clock is "valid" by a magic epoch (this box boots at
+	 * 2024-01-01, not 1970, so naive thresholds misfire). ctrld's DoH/DoH3 TLS
+	 * upstream needs a correct date for cert validation. If NTP has not already
+	 * set the clock, force a one-shot sync against IP-literal public servers
+	 * (Cloudflare + Google anycast - NO DNS needed). busybox `ntpd -q` exits 0
+	 * ONLY when it actually reached a server and set the time, so its exit status
+	 * IS our network probe (`timeout` bounds it so a down WAN can never stall):
+	 *   - success -> the clock is now correct -> launch ctrld below.
+	 *   - failure -> no network/NTP reachable; ctrld could not reach any upstream
+	 *     anyway, so DEFER (don't leave a hung ctrld that never binds) and let
+	 *     the 3-min watchdog start it once the link returns.
+	 * When the configured upstream DNS is dead but the WAN is up, the sync still
+	 * succeeds (it uses IPs, not DNS), so we proceed and ctrld becomes the only
+	 * working resolver - exactly the case that bit us. */
+	if (nvram_get_int("ntp_ready") != 1) {
+		if (system("timeout 20 ntpd -nq -p 162.159.200.123 -p 216.239.35.0 "
+			   "-p 162.159.200.1 >/dev/null 2>&1") == 0) {
 			nvram_set("ntp_ready", "1");
+		} else {
+			logmessage("ctrld", "no network / NTP unreachable; deferring "
+				"Control D start, watchdog will retry when the link is up");
+			eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
+			return;
+		}
 	}
 
 	/* Control D mode (--cd <resolver_uid>): ctrld authenticates to the Control D
@@ -18406,9 +18407,27 @@ check_ddr_done:
 		system("for f in /tmp/ctrld.log /tmp/ctrld_run.log; do "
 		       "[ -f \"$f\" ] && [ `wc -c < \"$f\"` -gt 131072 ] && "
 		       "{ tail -c 65536 \"$f\" > \"$f.t\" && cat \"$f.t\" > \"$f\"; rm -f \"$f.t\"; }; done");
-		/* respawn watchdog: restart ctrld if it is enabled but not running */
-		if (nvram_get_int("ctrld_enable") == 1 && !pids("ctrld"))
-			start_ctrld();
+		/* respawn / reconcile watchdog (every 3 min) */
+		if (nvram_get_int("ctrld_enable") == 1) {
+			if (!pids("ctrld")) {
+				/* not running (died, or was deferred while the WAN was down)
+				 * -> (re)start it. */
+				start_ctrld();
+			} else if (system("grep -qi ':14EA ' /proc/net/udp /proc/net/udp6 2>/dev/null") == 0 &&
+				   system("grep -q 'server=127.0.0.1#5354' /etc/dnsmasq.conf 2>/dev/null") != 0) {
+				/* ctrld IS up and serving on :5354, but dnsmasq is NOT pointed
+				 * at it (e.g. ctrld bound after start_ctrld's verification
+				 * window). Wire dnsmasq to ctrld now. Only fires on a real
+				 * mismatch, so it never flaps. */
+#ifdef RTCONFIG_MULTILAN_CFG
+				stop_dnsmasq(ALL_SDN);
+				start_dnsmasq(ALL_SDN);
+#else
+				stop_dnsmasq();
+				start_dnsmasq();
+#endif
+			}
+		}
 	}
 #endif
 #ifdef RTCONFIG_FANCTRL

@@ -1,6 +1,21 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_alpha2-dav18 (30-Jun-2026)
+ - CHANGED: ctrld clock handling is now keyed on NETWORK availability instead
+         of guessing the clock by a magic epoch (the box boots at 2024-01-01,
+         so the old "valid if > 2020" / "> 2026" thresholds misfired). If NTP
+         hasn't set the clock, start_ctrld() forces a one-shot sync against
+         IP-literal servers; busybox `ntpd -q` exits 0 only if it actually
+         reached a server, so its exit code is the network probe: success ->
+         clock fixed -> launch; failure (no link) -> defer and let the watchdog
+         retry. The 30s ntp_ready poll is gone, so a restart with a working
+         (or manually set) clock comes up at once.
+ - ADDED: ctrld_check (3-min watchdog) self-heals a "ctrld up but dnsmasq not
+         pointed at it" state - if ctrld is serving on :5354 but dnsmasq lacks
+         server=127.0.0.1#5354, it repoints dnsmasq (covers ctrld binding after
+         start_ctrld's verification window). Fires only on a real mismatch.
+
 3006.102.8_alpha2-dav17 (30-Jun-2026)
  - FIXED: regression from dav16 - ctrld ran but dnsmasq was NOT pointed at it
          (no server=127.0.0.1#5354), so DNS resolved via the normal upstream
