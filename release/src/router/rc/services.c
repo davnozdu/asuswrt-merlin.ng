@@ -16127,11 +16127,12 @@ start_ctrld(void)
 
 	/* Wait for ctrld to ACTUALLY bind :5354. A live process is not the same as
 	 * a working listener: ctrld can Fatal on a bind clash, or hang fetching its
-	 * CD config (bad clock / dead network). 5354 == 0x14EA in /proc/net/udp; we
-	 * poll that rather than just pids() so we never declare success early. */
+	 * CD config (bad clock / dead network). 5354 == 0x14EA; ctrld binds an IPv6
+	 * wildcard (:::5354), so we must check /proc/net/udp6 too, not just the IPv4
+	 * /proc/net/udp - poll that rather than just pids() to never succeed early. */
 	for (i = 0; i < 15; i++) {
 		if (pids("ctrld") &&
-		    system("grep -qi ':14EA ' /proc/net/udp 2>/dev/null") == 0)
+		    system("grep -qi ':14EA ' /proc/net/udp /proc/net/udp6 2>/dev/null") == 0)
 			break;
 		sleep(1);
 	}
@@ -16144,7 +16145,7 @@ start_ctrld(void)
 	 * normal resolver so DNS keeps working, and let the watchdog retry. This
 	 * closes the "process alive but not listening" hole that black-holed DNS. */
 	if (pids("ctrld") &&
-	    system("grep -qi ':14EA ' /proc/net/udp 2>/dev/null") == 0) {
+	    system("grep -qi ':14EA ' /proc/net/udp /proc/net/udp6 2>/dev/null") == 0) {
 #ifdef RTCONFIG_MULTILAN_CFG
 		stop_dnsmasq(ALL_SDN);
 		start_dnsmasq(ALL_SDN);

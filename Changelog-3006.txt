@@ -1,6 +1,15 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_alpha2-dav17 (30-Jun-2026)
+ - FIXED: regression from dav16 - ctrld ran but dnsmasq was NOT pointed at it
+         (no server=127.0.0.1#5354), so DNS resolved via the normal upstream
+         and bypassed Control D (device stopped showing in the CD dashboard).
+         Cause: the ":5354 bound?" check only looked at IPv4 /proc/net/udp,
+         but ctrld binds an IPv6 wildcard (:::5354) which lives in
+         /proc/net/udp6 - so the check failed and start_ctrld() skipped the
+         dnsmasq repoint. Now checks both /proc/net/udp and /proc/net/udp6.
+
 3006.102.8_alpha2-dav16 (30-Jun-2026)
  - FIXED: GT-BE98 Control D restart is now reliable. start_ctrld() (a)
          treats an already-valid system clock as ready, so a manual `date`
