@@ -16052,48 +16052,30 @@ start_ctrld(void)
 		nvram_commit();
 	}
 
-	/* Wait (bounded) for the network and clock to be ready before launching.
-	 * ntp_ready implies the WAN is up AND the system clock is valid, which the
-	 * DoH/TLS upstream needs for certificate validation. Never blocks boot
-	 * forever: capped at ~30s, after which the respawn cron will retry. */
-	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1; i++)
+	/* Wait (bounded) for the clock to be valid before launching: ctrld's
+	 * DoH/DoH3 TLS upstream needs a correct date for cert validation. "Valid" =
+	 * NTP flagged ready OR the system clock is already sane (set manually with
+	 * `date`, or by a prior sync) - so a manual clock fix makes a restart start
+	 * ctrld immediately instead of always burning the full 30s. */
+	for (i = 0; i < 30 && nvram_get_int("ntp_ready") != 1 && time(NULL) <= 1577836800; i++)
 		sleep(1);
 
-	/* Hard clock failsafe (post-reboot deadlock breaker). If NTP still hasn't
-	 * set the clock (ntp_ready==0), the system time is stuck near the boot
-	 * epoch (~2010/2024). ctrld's DoH/DoH3 (QUIC) upstream then fails TLS
-	 * certificate validation ("not yet valid") and HANGS on startup without
-	 * ever binding its listener, so dnsmasq's 127.0.0.1#5354 upstream
-	 * black-holes ALL DNS. And because DNS is dead, ntpd can never resolve its
-	 * pool hostname to set the clock -> a permanent deadlock that only a lucky
-	 * boot-race avoided before (observed on hardware 2026-06-29). Break it the
-	 * same way ctrld's bootstrap_ip does: force a one-shot NTP sync against
-	 * IP-literal public servers (Cloudflare + Google anycast) so NO DNS is
-	 * needed. busybox `ntpd -q` exits after the first sync; `timeout` bounds it
-	 * so a down WAN can never stall boot. Once the clock is sane, TLS works and
-	 * ctrld comes up normally. */
-	if (nvram_get_int("ntp_ready") != 1) {
+	/* Clock failsafe: if the time is still bogus (NTP couldn't resolve its pool
+	 * host - e.g. the configured upstream DNS is dead, which is what actually
+	 * stalls the clock on this box), force a one-shot sync against IP-literal
+	 * public NTP servers (Cloudflare + Google anycast) so NO DNS is needed.
+	 * `timeout` bounds it so a down WAN can never stall boot. We do NOT gate the
+	 * launch on the result: ctrld is started regardless, because Control D's DoH
+	 * (reached via its bootstrap_ip) may be the ONLY working resolver when the
+	 * configured DNS is dead. DNS can't be black-holed by a still-bad clock
+	 * because we only wire dnsmasq to ctrld AFTER confirming it really binds
+	 * :5354 (see below). */
+	if (nvram_get_int("ntp_ready") != 1 && time(NULL) <= 1577836800) {
 		system("timeout 20 ntpd -nq "
 		       "-p 162.159.200.123 -p 216.239.35.0 -p 162.159.200.1 "
 		       ">/dev/null 2>&1");
 		if (time(NULL) > 1577836800)	/* clock now past 2020-01-01 -> valid */
 			nvram_set("ntp_ready", "1");
-	}
-
-	/* ROCK-SOLID CLOCK GATE: never launch ctrld with a bogus clock - that is
-	 * exactly what black-holes DNS and deadlocks the box after a reboot. If the
-	 * NTP failsafe above still couldn't set the time (e.g. WAN was momentarily
-	 * down), DEFER: do NOT start ctrld. dnsmasq is already on the normal
-	 * resolver (ctrld isn't running, and start_dnsmasq's 5354 upstream is gated
-	 * on pids("ctrld")), so DNS keeps working and normal NTP can sync. We leave
-	 * the ctrld_check watchdog cron in place; it retries start_ctrld every 3 min
-	 * and, once the clock is valid, ctrld comes up cleanly. Net effect: ctrld
-	 * ALWAYS starts strictly AFTER the clock is correct. */
-	if (time(NULL) <= 1577836800) {
-		logmessage("ctrld", "system clock not set yet (NTP pending); "
-			"deferring Control D start to avoid DNS deadlock, will retry");
-		eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
-		return;
 	}
 
 	/* Control D mode (--cd <resolver_uid>): ctrld authenticates to the Control D
@@ -16133,25 +16115,47 @@ start_ctrld(void)
 		host,
 		cache_size,
 		nvram_get_int("ctrld_debug") ? "-vv" : "");
+	/* Make sure the previous ctrld has FULLY exited before relaunching. ctrld's
+	 * CD config pins an explicit listener (0.0.0.0:5354) with NO port fallback,
+	 * so if the old instance still holds the socket the new one Fatals on bind
+	 * and dies, leaving DNS dead. (killall_tk at the top is synchronous, but be
+	 * defensive against a fast manual restart.) */
+	for (i = 0; i < 10 && pids("ctrld"); i++)
+		sleep(1);
+
 	system(cmd);
 
-	for (i = 0; i < 12 && !pids("ctrld"); i++)
+	/* Wait for ctrld to ACTUALLY bind :5354. A live process is not the same as
+	 * a working listener: ctrld can Fatal on a bind clash, or hang fetching its
+	 * CD config (bad clock / dead network). 5354 == 0x14EA in /proc/net/udp; we
+	 * poll that rather than just pids() so we never declare success early. */
+	for (i = 0; i < 15; i++) {
+		if (pids("ctrld") &&
+		    system("grep -qi ':14EA ' /proc/net/udp 2>/dev/null") == 0)
+			break;
 		sleep(1);
-	sleep(2);	/* let ctrld bind its listener */
+	}
 
-	/* Respawn watchdog (every 3 min) in case ctrld dies. */
+	/* Respawn watchdog (every 3 min) in case ctrld dies or never bound. */
 	eval("cru", "a", "ctrld_watch", "*/3 * * * * rc rc_service ctrld_check");
 
-	/* Now that ctrld is up, regenerate dnsmasq so it forwards to 127.0.0.1#5354.
-	 * (start_dnsmasq's ctrld upstream is gated on pids("ctrld"), so if ctrld
-	 * failed to come up dnsmasq stays on the normal resolver - no outage.) */
+	/* Wire dnsmasq to ctrld ONLY if it is truly serving on 5354. If it never
+	 * came up (bad clock / dead network / bind clash), leave dnsmasq on the
+	 * normal resolver so DNS keeps working, and let the watchdog retry. This
+	 * closes the "process alive but not listening" hole that black-holed DNS. */
+	if (pids("ctrld") &&
+	    system("grep -qi ':14EA ' /proc/net/udp 2>/dev/null") == 0) {
 #ifdef RTCONFIG_MULTILAN_CFG
-	stop_dnsmasq(ALL_SDN);
-	start_dnsmasq(ALL_SDN);
+		stop_dnsmasq(ALL_SDN);
+		start_dnsmasq(ALL_SDN);
 #else
-	stop_dnsmasq();
-	start_dnsmasq();
+		stop_dnsmasq();
+		start_dnsmasq();
 #endif
+	} else {
+		logmessage("ctrld", "ctrld did not bind :5354 (clock/network/bind); "
+			"leaving dnsmasq on the normal resolver, watchdog will retry");
+	}
 }
 #endif	/* GTBE98 */
 

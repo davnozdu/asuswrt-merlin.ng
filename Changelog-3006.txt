@@ -1,18 +1,27 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_alpha2-dav15 (29-Jun-2026)
- - FIXED: GT-BE98 Control D post-reboot DNS deadlock. When NTP had not yet
-         set the clock, ctrld's DoH/DoH3 (QUIC) TLS handshake failed cert
-         validation and ctrld hung on startup without binding :5354, so
-         dnsmasq black-holed all DNS; with DNS dead, NTP could never sync
-         its pool host -> permanent deadlock (only a boot-race avoided it
-         before). start_ctrld() now (a) forces a one-shot NTP sync against
-         IP-literal servers (Cloudflare/Google anycast, no DNS needed) and
-         (b) hard-gates the launch on a valid clock: if the clock is still
-         bogus it DEFERS ctrld (dnsmasq stays on the normal resolver, DNS
-         keeps working) and the 3-min watchdog retries. ctrld now ALWAYS
-         starts strictly after the clock is correct.
+3006.102.8_alpha2-dav16 (30-Jun-2026)
+ - FIXED: GT-BE98 Control D restart is now reliable. start_ctrld() (a)
+         treats an already-valid system clock as ready, so a manual `date`
+         fix starts ctrld immediately instead of always waiting the full
+         30s; (b) waits for the OLD ctrld to fully exit before relaunching
+         (its CD config pins an explicit :5354 listener with no port
+         fallback, so a lingering socket made the new instance Fatal on
+         bind and die); (c) repoints dnsmasq at ctrld ONLY after confirming
+         ctrld actually bound :5354 (polls /proc/net/udp), otherwise leaves
+         dnsmasq on the normal resolver and lets the 3-min watchdog retry -
+         closing the "process alive but not listening" hole that black-holed
+         DNS. Note: ctrld's own restart/reload/stop only work for an
+         installed service, not our `ctrld run --cd --daemon`, so kill+
+         relaunch is the only option.
+ - ADDED: clock failsafe in start_ctrld() - if NTP hasn't set the time
+         (e.g. the configured upstream DNS is dead, which stalls NTP), force
+         a one-shot sync against IP-literal NTP servers (Cloudflare/Google
+         anycast, no DNS needed) so ctrld's TLS can validate. The launch is
+         NOT gated on it: ctrld may be the only working resolver when the
+         upstream DNS is dead, and (c) above keeps a bad clock from breaking
+         DNS.
  - CHANGED: baked ctrld updated 1.5.2 -> 1.5.3 (committed arm64 blob).
  - NEW: "Restart Control D" button on the WAN page (pure restart, saves no
          settings) + a ctrld-restart SSH helper (/usr/sbin/ctrld-restart);
