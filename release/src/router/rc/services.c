@@ -2780,7 +2780,7 @@ char* _add_ip6_lansdnaddr()
 	else {
 		p = (char*)ipv6_router_address(NULL);
 		if (*p) {
-			snprintf(ip, sizeof(ip), "%s/%d", p, v6_prefix_length);
+			snprintf(ip, sizeof(ip), "%s/%d", p, (v6_prefix_length > 64 ? v6_prefix_length : 64));
 			eval("ip", "-6", "addr", "flush", "dev", lan_ifname, "scope", "global");
 			eval("ip", "-6", "addr", "add", ip, "dev", lan_ifname);
 			if (!nvram_match(ipv6_nvname("ipv6_rtr_addr"), (char*)p))
