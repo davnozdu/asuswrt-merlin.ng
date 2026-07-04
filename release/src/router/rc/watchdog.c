@@ -11881,12 +11881,26 @@ wdp:
 		start_ntpd();
 	}
 #endif
-#if RTCONFIG_NTPD
-	if (++ntpd_timer >= DAY_PERIOD) {
-		ntpd_timer = 0;
-		logmessage("ntpd", "Daily service restart");
-		stop_ntpd();
-		start_ntpd();
+#if defined(GTBE98)
+	/* DNS-independent clock failsafe - ALL GT-BE98 builds (default/rog/slim),
+	 * not just the Control D slim. The stock ntp daemon resolves its pool by
+	 * HOSTNAME (pool.ntp.org), so a dead or misconfigured upstream DNS leaves the
+	 * clock stuck at the ~2024 boot epoch forever (ntp_ready never flips, and the
+	 * daily restart above can't help - still no DNS). While the clock is unset
+	 * and the WAN is reachable, periodically force a one-shot sync against
+	 * IP-literal public NTP servers (Cloudflare + Google anycast - no DNS
+	 * needed). Backgrounded + `timeout`-bounded so the watchdog never blocks;
+	 * it sets ntp_ready on success and stops the moment the clock is set.
+	 * Runs ~every 2 min (4 x 30s watchdog ticks). */
+	{
+		static int gtbe98_ntpip = 0;
+		if (nvram_get_int("ntp_ready") == 1) {
+			gtbe98_ntpip = 0;
+		} else if (nvram_match("link_internet", "2") && ++gtbe98_ntpip >= 4) {
+			gtbe98_ntpip = 0;
+			system("timeout 20 ntpd -nq -p 162.159.200.123 -p 216.239.35.0 "
+			       "-p 162.159.200.1 >/dev/null 2>&1 && nvram set ntp_ready=1 &");
+		}
 	}
 #endif
 }

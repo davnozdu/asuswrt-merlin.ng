@@ -1,6 +1,20 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_alpha2-dav19 (04-Jul-2026)
+ - CHANGED: the DNS-independent clock failsafe now runs on ALL GT-BE98 builds
+         (default / rog / slim), not just the Control D slim. It moved into the
+         watchdog: while the clock is unset (ntp_ready != 1) and the WAN is
+         reachable, it force-syncs against IP-literal NTP servers (no DNS) about
+         every 2 min, backgrounded so the watchdog never blocks, and stops as
+         soon as the clock is set. The stock ntp daemon only knows its pool by
+         HOSTNAME (pool.ntp.org), so a dead/misconfigured upstream DNS otherwise
+         left the clock stuck at the ~2024 boot epoch forever. (start_ctrld
+         keeps its own immediate sync for ctrld's TLS on the slim build.)
+ - FIXED: removed a duplicated "restart ntpd every 24h" watchdog block - the
+         gnuton base already had it, and the dav15 Merlin backport (#43c4b107b9)
+         added a second copy, so ntpd was being restarted ~every 12h.
+
 3006.102.8_alpha2-dav18 (30-Jun-2026)
  - CHANGED: ctrld clock handling is now keyed on NETWORK availability instead
          of guessing the clock by a magic epoch (the box boots at 2024-01-01,
