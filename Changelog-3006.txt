@@ -1,7 +1,15 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_alpha2-dav19 (04-Jul-2026)
+3006.102.8_beta3-dav19 (04-Jul-2026)
+ - REBASE: version label moved alpha2 -> beta3 to match Merlin 3006.102.8 beta3.
+ - BACKPORT (Merlin 3006.102.8 beta2 -> beta3, software only, no driver/blob
+         merges): rc: dhcpc-event script moved to end of event; httpd: correct
+         IPv6 prefix length for LAN/router IP; rc: don't assign the whole /56 to
+         br0 (limit to /64); rc+webui: rework user-defined IPv6 WAN prefix;
+         webui: Wireless Log popup UI4-aware, add missing state.js dep,
+         incremental client-list DOM diff, traffic analyzer no longer tied to
+         bwdpi, remove obsolete USB modem tweak.
  - CHANGED: the DNS-independent clock failsafe now runs on ALL GT-BE98 builds
          (default / rog / slim), not just the Control D slim. It moved into the
          watchdog: while the clock is unset (ntp_ready != 1) and the WAN is
