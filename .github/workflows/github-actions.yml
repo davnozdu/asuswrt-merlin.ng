@@ -59,23 +59,41 @@ jobs:
             fi
 
             ls /home/docker
-        - name: "Fetch latest ctrld (slim flavor only)"
+        - name: "Build patched ctrld (slim flavor only)"
           if: matrix.cfg.skip == false && matrix.cfg.ctrld == 'y'
           run: |
             cd ${PROJECT_DIR}
-            DEST="release/src/router/ctrld/prebuilt/ctrld"
-            # Resolve the GitHub "Latest" release WITHOUT the API (no rate limit):
-            # follow the releases/latest redirect to /tag/vX.Y.Z and parse the version,
-            # then build the arm64 asset URL directly.
-            VER=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/Control-D-Inc/ctrld/releases/latest | sed 's#.*/tag/v##')
-            echo "Latest ctrld version: ${VER}"
-            URL="https://github.com/Control-D-Inc/ctrld/releases/download/v${VER}/ctrld_${VER}_linux_arm64.tar.gz"
-            mkdir -p /tmp/ctrldul
-            if [ -n "${VER}" ] && curl -fsSL "${URL}" -o /tmp/ctrld.tgz && tar xzf /tmp/ctrld.tgz -C /tmp/ctrldul ctrld; then
-                install -D /tmp/ctrldul/ctrld "${DEST}" && chmod 755 "${DEST}"
-                echo "ctrld updated to v${VER}:"; ls -l "${DEST}"
+            DEST="${PROJECT_DIR}/release/src/router/ctrld/prebuilt/ctrld"
+            # Build ctrld from source (pinned tag) with our speed patch on top:
+            # in --cd mode ctrld discards any local config, so cache_serve_stale /
+            # discovery toggles can only be injected via env vars added by
+            # release/src/router/ctrld/patches/. A stock binary silently ignores
+            # those env vars, so falling back to the committed blob is safe.
+            CTRLD_TAG="v1.5.3"
+            GO_VER="1.25.0"
+            set +e
+            (
+              set -e
+              curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" -o /tmp/go.tgz
+              tar -C /tmp -xzf /tmp/go.tgz
+              curl -fsSL "https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz" -o /tmp/upx.txz
+              tar -C /tmp -xJf /tmp/upx.txz
+              git clone --depth 1 --branch "${CTRLD_TAG}" https://github.com/Control-D-Inc/ctrld /tmp/ctrld-src
+              cd /tmp/ctrld-src
+              for p in ${PROJECT_DIR}/release/src/router/ctrld/patches/*.patch; do
+                  echo "Applying $(basename $p)"
+                  git apply -v "$p"
+              done
+              COMMIT=$(git rev-parse HEAD)
+              export PATH="/tmp/go/bin:$PATH" GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux GOARCH=arm64
+              go build -trimpath -ldflags "-s -w -X main.version=${CTRLD_TAG#v} -X main.commit=${COMMIT}" -o /tmp/ctrld-bin ./cmd/ctrld
+              /tmp/upx-4.2.4-amd64_linux/upx --best --lzma -q /tmp/ctrld-bin
+              install -m 755 /tmp/ctrld-bin "${DEST}"
+            )
+            if [ $? -eq 0 ]; then
+                echo "ctrld ${CTRLD_TAG} built from source with speed patch:"; ls -l "${DEST}"
             else
-                echo "WARN: could not fetch latest ctrld (v${VER}); keeping committed blob"; ls -l "${DEST}" || true
+                echo "WARN: source build failed; keeping committed stock blob"; ls -l "${DEST}" || true
             fi
         - name: "Set version"
           if: matrix.cfg.skip == false

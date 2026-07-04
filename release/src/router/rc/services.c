@@ -16023,7 +16023,7 @@ start_ctrld(void)
 {
 	char uid[80];
 	char host[80];
-	char cmd[384];
+	char cmd[512];
 	int i, cache_size;
 
 	if (get_model() != MODEL_GTBE98)
@@ -16111,10 +16111,21 @@ start_ctrld(void)
 	 * ./ctrld.toml in the CWD, and the rc CWD is the read-only rootfs -> without
 	 * this it fatals "failed to write default config file: read-only file
 	 * system" and never starts. --homedir/--log already point at tmpfs too. */
+	/* Speed knobs (serve-stale cache, TTL override, discovery off) cannot be
+	 * set via CLI flags or a local config file in --cd mode (ctrld regenerates
+	 * its config from the Control D API on every start), so our patched ctrld
+	 * (release/src/router/ctrld/patches/) reads them from the environment.
+	 * A stock ctrld binary simply ignores these variables. Discovery
+	 * (mDNS/ARP/DHCP/PTR probing) is useless here - dnsmasq fronts all LAN
+	 * queries, so ctrld only ever sees 127.0.0.1 - and is pure overhead. */
 	snprintf(cmd, sizeof(cmd),
-		"cd /tmp && /usr/sbin/ctrld run --cd %s --proto %s --custom-hostname '%s' "
-		"--cache_size %d --homedir /tmp --log /tmp/ctrld.log %s --daemon "
-		">/tmp/ctrld_run.log 2>&1 &",
+		"cd /tmp && CTRLD_CACHE_SERVE_STALE=%d CTRLD_CACHE_TTL_OVERRIDE=%d "
+		"CTRLD_DISCOVERY_OFF=%d /usr/sbin/ctrld run --cd %s --proto %s "
+		"--custom-hostname '%s' --cache_size %d --homedir /tmp "
+		"--log /tmp/ctrld.log %s --daemon >/tmp/ctrld_run.log 2>&1 &",
+		nvram_get_int("ctrld_serve_stale") ? 1 : 0,
+		nvram_get_int("ctrld_ttl"),
+		nvram_get_int("ctrld_discovery") ? 0 : 1,
 		uid,
 		nvram_get_int("ctrld_doh3") ? "doh3" : "doh",
 		host,

@@ -1,0 +1,43 @@
+diff --git a/cmd/cli/cli.go b/cmd/cli/cli.go
+index b75856f..24934c5 100644
+--- a/cmd/cli/cli.go
++++ b/cmd/cli/cli.go
+@@ -822,9 +822,38 @@ func processLogAndCacheFlags(v *viper.Viper, cfg *ctrld.Config) {
+ 		cfg.Service.CacheEnable = true
+ 		cfg.Service.CacheSize = cacheSize
+ 	}
++	processEnvOverrides(cfg)
+ 	v.Set("service", cfg.Service)
+ }
+ 
++// processEnvOverrides applies service tweaks from environment variables.
++// In cd mode the fetched Control D config replaces the local one entirely,
++// so these knobs cannot come from a config file; the router firmware passes
++// them in the environment instead (asuswrt-merlin GT-BE98 integration).
++func processEnvOverrides(cfg *ctrld.Config) {
++	if os.Getenv("CTRLD_CACHE_SERVE_STALE") == "1" {
++		cfg.Service.CacheServeStale = true
++	}
++	if s := os.Getenv("CTRLD_CACHE_TTL_OVERRIDE"); s != "" {
++		if n, err := strconv.Atoi(s); err == nil && n > 0 {
++			cfg.Service.CacheTTLOverride = n
++		}
++	}
++	if os.Getenv("CTRLD_DISCOVERY_OFF") == "1" {
++		off := false
++		cfg.Service.DiscoverMDNS = &off
++		cfg.Service.DiscoverARP = &off
++		cfg.Service.DiscoverDHCP = &off
++		cfg.Service.DiscoverPtr = &off
++		cfg.Service.DiscoverHosts = &off
++	}
++	if s := os.Getenv("CTRLD_MAX_CONCURRENT"); s != "" {
++		if n, err := strconv.Atoi(s); err == nil && n > 0 {
++			cfg.Service.MaxConcurrentRequests = &n
++		}
++	}
++}
++
+ func netInterface(ifaceName string) (*net.Interface, error) {
+ 	if ifaceName == "auto" {
+ 		ifaceName = defaultIfaceName()

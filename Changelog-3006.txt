@@ -1,6 +1,25 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta3-dav20 (04-Jul-2026)
+ - NEW: ctrld is now built from source in CI (pinned v1.5.3) with a local
+         speed patch (release/src/router/ctrld/patches/) instead of shipping
+         the stock release binary. In --cd mode ctrld regenerates its config
+         from the Control D API on every start and discards any local TOML,
+         so performance knobs are injected via environment variables that the
+         patched binary understands (a stock binary ignores them safely).
+ - NEW: DNS speed tuning, all baked in and on by default on the slim build:
+         serve-stale cache (answer from expired cache while the upstream is
+         slow/unreachable; nvram ctrld_serve_stale, default 1), optional cache
+         TTL override (ctrld_ttl, default 0 = respect real TTLs), and LAN
+         discovery (mDNS/ARP/DHCP/PTR probing) disabled (ctrld_discovery,
+         default 0) - dnsmasq fronts all LAN queries so ctrld only ever sees
+         127.0.0.1, making discovery pure overhead.
+ - CHANGED: DoH3 (HTTP/3 / QUIC) upstream is now the DEFAULT (ctrld_doh3=1):
+         faster reconnects, no head-of-line blocking.
+ - CHANGED: webui (WAN page, Control D section): added "Serve stale cache"
+         and "Cache TTL override" controls; DoH3 description updated.
+
 3006.102.8_beta3-dav19 (04-Jul-2026)
  - REBASE: version label moved alpha2 -> beta3 to match Merlin 3006.102.8 beta3.
  - BACKPORT (Merlin 3006.102.8 beta2 -> beta3, software only, no driver/blob
