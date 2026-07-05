@@ -2912,6 +2912,20 @@ int start_cake(void)
 	snprintf(overheadstr, sizeof(overheadstr), "overhead %d mpu %d", nvram_get_int("qos_overhead"), nvram_get_int("qos_mpu"));
 
 	const char *wan_ifname = get_wan_ifname(wan_primary_ifunit());
+	const char *p;
+
+	/* wan_ifname is single-quoted into ULIF/DLIF/MIF in the generated root
+	 * script; a literal quote (or any shell-unsafe char) would break out. It is
+	 * a kernel-derived token, but guard defensively (matches start_hwqos): reject
+	 * anything that isn't a plain interface name and fall back to an empty
+	 * (inert) value rather than emit it. */
+	for (p = wan_ifname; *p; p++) {
+		if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+		      (*p >= '0' && *p <= '9') || *p == '.' || *p == '_' || *p == '-')) {
+			wan_ifname = "";
+			break;
+		}
+	}
 
 	snprintf(nvnat, sizeof (nvnat), "wan%d_nat_x", wan_primary_ifunit());
 	nat = nvram_get_int(nvnat);
