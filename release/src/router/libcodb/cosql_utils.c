@@ -791,10 +791,10 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 		}
 		
 		if (strlen(match_query_string)>0) {
-			strncat(match_query_string, split_string, strlen(split_string));
+			strncat(match_query_string, split_string, match_query_string_size - strlen(match_query_string));
 		}
 
-		strncat(match_query_string, buff, strlen(buff));
+		strncat(match_query_string, buff, match_query_string_size - strlen(match_query_string));
 
 		match_columns++;
 	}
@@ -1039,10 +1039,10 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 		}
 		
 		if (strlen(match_query_string)>0) {
-			strncat(match_query_string, split_string, strlen(split_string));
+			strncat(match_query_string, split_string, match_query_string_size - strlen(match_query_string));
 		}
 
-		strncat(match_query_string, buff, strlen(buff));
+		strncat(match_query_string, buff, match_query_string_size - strlen(match_query_string));
 
 		columns++;
 	}
@@ -1335,7 +1335,7 @@ int cosql_create_table(sqlite3 *pdb, const char* db_version, int columns_count, 
 			strncat(sql_create_table, ",", 1);
 		}
 
-		strncat(sql_create_table, buff, strlen(buff));
+		strncat(sql_create_table, buff, sql_create_table_size - strlen(sql_create_table));
 
 		columns++;
 	}
@@ -1802,8 +1802,8 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 			strncat(sql_insert_values, ",", 1);
 		}
 
-		strncat(sql_column_names, buff_column_name, strlen(buff_column_name));
-		strncat(sql_insert_values, buff_insert_value, strlen(buff_insert_value));
+		strncat(sql_column_names, buff_column_name, sql_insert_columns_size - strlen(sql_column_names));
+		strncat(sql_insert_values, buff_insert_value, sql_insert_values_size - strlen(sql_insert_values));
 
 		columns++;
 	}
@@ -1988,7 +1988,7 @@ int cosql_get_column_values(sqlite3* pdb,
 				strncat(sql_column_names, ",", 1);
 			}
 
-			strncat(sql_column_names, column_name, strlen(column_name));
+			strncat(sql_column_names, column_name, sql_query_columns_size - strlen(sql_column_names));
 		}
 
 		query_columns++;
@@ -2009,19 +2009,19 @@ int cosql_get_column_values(sqlite3* pdb,
 
 	if (sql_and_where!=NULL && sql_or_where!=NULL) {
 		strncat(sql_query, " WHERE (", 8);
-		strncat(sql_query, sql_and_where, strlen(sql_and_where));
+		strncat(sql_query, sql_and_where, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, ") AND (", 7);
-		strncat(sql_query, sql_or_where, strlen(sql_or_where));
+		strncat(sql_query, sql_or_where, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, ")", 1);
 	}
 	else if (sql_and_where!=NULL) {
 		strncat(sql_query, " WHERE (", 8);
-		strncat(sql_query, sql_and_where, strlen(sql_and_where));
+		strncat(sql_query, sql_and_where, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, ")", 1);
 	}
 	else if (sql_or_where!=NULL) {
 		strncat(sql_query, " WHERE (", 8);
-		strncat(sql_query, sql_or_where, strlen(sql_or_where));
+		strncat(sql_query, sql_or_where, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, ")", 1);
 	}
 	else {
@@ -2033,14 +2033,14 @@ int cosql_get_column_values(sqlite3* pdb,
 		memset(sql_between_data_time, 0, MAX_BUF_LEN);
 		format_sql_between_data_time(start_data_time, end_data_time, sql_between_data_time);
 
-		strncat(sql_query, sql_between_data_time, strlen(sql_between_data_time));
+		strncat(sql_query, sql_between_data_time, sql_query_size - strlen(sql_query) - 1);
 	}
 
 	if (order_column_name!=NULL && order_by!=NULL) {
 		strncat(sql_query, " ORDER BY ", 10);
-		strncat(sql_query, order_column_name, strlen(order_column_name));
+		strncat(sql_query, order_column_name, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, " ", 1);
-		strncat(sql_query, order_by, strlen(order_by));
+		strncat(sql_query, order_by, sql_query_size - strlen(sql_query) - 1);
 	}
 	
 	if (limit>0) {
@@ -2048,7 +2048,7 @@ int cosql_get_column_values(sqlite3* pdb,
 
 		char buf_limit[5];
 		snprintf(buf_limit, 5, "%d", limit);
-		strncat(sql_query, buf_limit, strlen(buf_limit));
+		strncat(sql_query, buf_limit, sql_query_size - strlen(sql_query) - 1);
 	}
 	
 	codbg("sql_query=%s", sql_query);

@@ -262,10 +262,10 @@ static int ip_range_checker(char *old, char *new, int len)
 		QOSLOG("case 2: mask=%d, mask_addr=%x, host_start=%x, host_end=%x", mask, mask_addr, host_start, host_end);
 
 		start = inet_ntoa(inet_src);
-		strncat(new, start, strlen(start));
+		strncat(new, start, len - strlen(new) - 1);
 		strncat(new, "-", 1);
 		end = inet_ntoa(inet_dst);
-		strncat(new, end, strlen(end));
+		strncat(new, end, len - strlen(new) - 1);
 		QOSLOG("case 2: new=%s, end=%s", new, end);
 		ret = 1;
 		goto END;

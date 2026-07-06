@@ -496,8 +496,8 @@ _dprintf("%s(%d): ifunit=%d, if=%s.\n", __func__, getpid(), ifunit, wan_ifname);
 			char *domain, *result;
 			if ((domain = getenv("domain")) && *domain &&
 			    find_word(value, trim_r(domain)) == NULL) {
-				result = alloca(strlen(domain) + strlen(value) + 2);
-				sprintf(result, "%s %s", domain, value);
+				result = alloca((strlen(domain) + strlen(value) + 2) > 2048 ? 2048 : (strlen(domain) + strlen(value) + 2)); /* hardening T4: cap vs hostile DHCP option */
+				snprintf(result, (strlen(domain) + strlen(value) + 2) > 2048 ? 2048 : (strlen(domain) + strlen(value) + 2), "%s %s", domain, value);
 				value = result;
 			}
 			nvram_set(strcat_r(prefix, "domain", tmp), trim_r(value));
@@ -766,8 +766,8 @@ renew(void)
 			char *domain, *result;
 			if ((domain = getenv("domain")) && *domain &&
 			    find_word(value, trim_r(domain)) == NULL) {
-				result = alloca(strlen(domain) + strlen(value) + 2);
-				sprintf(result, "%s %s", domain, value);
+				result = alloca((strlen(domain) + strlen(value) + 2) > 2048 ? 2048 : (strlen(domain) + strlen(value) + 2)); /* hardening T4: cap vs hostile DHCP option */
+				snprintf(result, (strlen(domain) + strlen(value) + 2) > 2048 ? 2048 : (strlen(domain) + strlen(value) + 2), "%s %s", domain, value);
 				value = result;
 			}
 			changed += nvram_set_check(strcat_r(prefix, "domain", tmp), trim_r(value));
