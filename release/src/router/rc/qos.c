@@ -212,6 +212,11 @@ static int ip_range_checker(char *old, char *new, int len)
 	while ((p = strchr(g, '.')) != NULL) {
 		len_to_dot = p - g;
 		len_total += len_to_dot + 1;
+		/* reject a malformed octet or an over-long address before copying:
+		 * a valid octet is <= 3 chars and the dotted prefix must fit head[].
+		 * Without this an addr like "12345.1.1.*" overflows a[]/head[]. */
+		if (len_to_dot >= (int)sizeof(a) || len_total > (int)sizeof(head) - 1)
+			goto END;
 		memset(a, 0, sizeof(a));
 		strncpy(a, g, len_to_dot);
 
@@ -238,6 +243,8 @@ static int ip_range_checker(char *old, char *new, int len)
 	p = strchr(g, '/');
 	if (p != NULL) {
 		len_to_line = p - g;
+		if (len_to_line >= (int)sizeof(a))	/* over-long octet -> reject (a[] OOB guard) */
+			goto END;
 		memset(a, 0, sizeof(a));
 		strncpy(a, g, len_to_line);
 
@@ -276,6 +283,8 @@ static int ip_range_checker(char *old, char *new, int len)
 	p = strchr(g, '-');
 	if (p != NULL) {
 		len_to_line = p - g;
+		if (len_to_line >= (int)sizeof(a))	/* over-long octet -> reject (a[] OOB guard) */
+			goto END;
 		memset(a, 0, sizeof(a));
 		strncpy(a, g, len_to_line);
 
