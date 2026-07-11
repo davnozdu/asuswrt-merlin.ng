@@ -4922,7 +4922,7 @@ int validate_apply(webs_t wp, json_object *root)
 					continue;
 				}
 				if(!strcmp(name, "qos_type") && *value &&
-				   (strspn(value, "0123456789") != strlen(value) || atoi(value) > 11)){
+				   (strlen(value) > 2 || strspn(value, "0123456789") != strlen(value) || atoi(value) > 11)){	/* len>2 also keeps atoi() from overflowing */
 					dbg("reject out-of-range qos_type=%s\n", value);
 					continue;
 				}
