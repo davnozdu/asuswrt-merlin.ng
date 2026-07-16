@@ -159,6 +159,29 @@ static int __attribute__((unused)) _fw_field_safe(const char *s)
 	return 1;
 }
 
+/* Strip ASCII spaces/tabs out of a rule-list field, IN PLACE.
+ *
+ * The GUI accepts human formatting in list fields - a port field of "80, 443"
+ * is legal there and reaches nvram verbatim. _fw_field_safe() then rejects it
+ * on the space, and the whole rule is silently dropped: the user sees a rule
+ * they successfully saved simply not working, with nothing logged.
+ *
+ * The space must NOT just be whitelisted. These fields are emitted raw into
+ * iptables-restore lines, so a space is exactly the character that would let an
+ * nvram value graft extra arguments onto a rule (a port of "80 -j ACCEPT"
+ * rewrites the rule's target). Normalise first and validate after: whitespace
+ * never reaches the emitted line, and the strict charset stays strict.
+ */
+static void __attribute__((unused)) _fw_strip_spaces(char *s)
+{
+	char *w;
+	if (!s) return;
+	for (w = s; *s; s++)
+		if (*s != ' ' && *s != '\t')
+			*w++ = *s;
+	*w = '\0';
+}
+
 static int __attribute__((unused)) _fw_keyword_safe(const char *s)
 {
 	if (!s)
@@ -1526,7 +1549,12 @@ void write_port_forwarding(FILE *fp, char *config, char *chain, char *lan_ip, ch
 			else if (cnt < 6)
 				srcip = "";
 
-			/* dstip/port/lport are emitted raw into iptables-restore lines; reject metachars/newlines */
+			/* dstip/port/lport are emitted raw into iptables-restore lines; reject metachars/newlines.
+			 * Normalise away GUI-legal whitespace first ("80, 443") so a saved rule is not
+			 * silently dropped, then apply the strict charset unchanged - see _fw_strip_spaces(). */
+			_fw_strip_spaces(port);
+			_fw_strip_spaces(dstip);
+			_fw_strip_spaces(lport);
 			if (!_fw_field_safe(port) || !_fw_field_safe(dstip) || (lport && *lport && !_fw_field_safe(lport)))
 				continue;
 
