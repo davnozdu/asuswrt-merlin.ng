@@ -6746,7 +6746,11 @@ struct nvram_tuple router_defaults[] = {
 	{ "wans_extwan", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
 	{ "wan_ifname_x", "eth0", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
 	{ "noconsole", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
-	{ "psc6g", "0", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+	/* reaper v1.5.8: this ungated entry duplicated the gated 6G entry near the top
+	 * of the table with a conflicting value ("0" here, "1" there), so a factory
+	 * reset landed psc6g=0 while an upgrade key-fill landed 1. Align to the
+	 * intended default. */
+	{ "psc6g", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
 	{ "wps_version2", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
 	{ "wps_config_method", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
 	{ "wps_modelname", "Wi-Fi Protected Setup Router", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
