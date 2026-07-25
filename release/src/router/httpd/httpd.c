@@ -1432,7 +1432,7 @@ handle_request(void)
 	}
 	file = &(path[1]);
 	len = strlen( file );
-	if ( file[0] == '/' || strcmp( file, ".." ) == 0 || strncmp( file, "../", 3 ) == 0 || strstr( file, "/../" ) != (char*) 0 || strcmp( &(file[len-3]), "/.." ) == 0 ) {
+	if ( file[0] == '/' || strcmp( file, ".." ) == 0 || strncmp( file, "../", 3 ) == 0 || strstr( file, "/../" ) != (char*) 0 || (len >= 3 && strcmp( &(file[len-3]), "/.." ) == 0) ) {
 		send_error( 400, "Bad Request", (char*) 0, "Illegal filename." );
 		return;
 	}

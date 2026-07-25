@@ -243,7 +243,12 @@ static void _wg_config_route(char* prefix, char* ifname, int table)
 		{
 			while(fgets(buf, sizeof(buf), fp))
 			{
-				snprintf(cmd, sizeof(cmd), "ip route add %s table %d ", trim_r(buf), table);
+				trim_r(buf);
+				/* the route line reaches a shell via system(); skip any line
+				 * carrying shell metacharacters */
+				if (buf[strcspn(buf, ";|&$`\\<>()\n\r\"'")] != '\0')
+					continue;
+				snprintf(cmd, sizeof(cmd), "ip route add %s table %d ", buf, table);
 				//_dprintf("[%s]\n", cmd);
 				system(cmd);
 			}

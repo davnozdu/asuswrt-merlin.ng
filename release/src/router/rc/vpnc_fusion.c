@@ -1569,6 +1569,17 @@ void _vpnc_ipset_destroy(int vpnc_idx)
 }
 #endif
 
+/* A value placed inside single quotes on a shell command line is safe unless it
+ * carries a quote itself or a control character. */
+static int __attribute__((unused)) vpnc_quote_safe(const char *s)
+{
+	for (; s && *s; s++) {
+		if (*s == '\'' || (unsigned char) *s < 0x20 || *s == 0x7f)
+			return 0;
+	}
+	return 1;
+}
+
 /*******************************************************************
  * NAME: start_vpnc_by_unit
  * AUTHOR: Andy Chiu
@@ -1651,6 +1662,12 @@ int start_vpnc_by_unit(const int unit)
 	{
 		char cmd[256] = {0};
 		_dprintf("[%s]Start to connect NordVPN(%d).\n", __FUNCTION__, prof->config.tpvpn.tpvpn_idx);
+		/* region is wrapped in single quotes for the shell: only a quote (or a
+		 * control character) can break out of it */
+		if (!vpnc_quote_safe(prof->config.tpvpn.region)) {
+			_dprintf("[%s]NordVPN: rejecting invalid region\n", __FUNCTION__);
+			return -1;
+		}
 		snprintf(cmd, sizeof(cmd), "nordvpn setconf '%s' %d %d &", prof->config.tpvpn.region, prof->config.tpvpn.tpvpn_idx, unit);
 		system(cmd);
 		return 0;
@@ -1660,6 +1677,10 @@ int start_vpnc_by_unit(const int unit)
 	{
 		char cmd[256] = {0};
 		_dprintf("[%s]Start to connect HMA(%d).\n", __FUNCTION__, prof->config.tpvpn.tpvpn_idx);
+		if (!vpnc_quote_safe(prof->config.tpvpn.region) || !vpnc_quote_safe(prof->config.tpvpn.conntype)) {
+			_dprintf("[%s]HMA: rejecting invalid region/conntype\n", __FUNCTION__);
+			return -1;
+		}
 		snprintf(cmd, sizeof(cmd), "hmavpn setconf '%s' '%s' %d %d &", prof->config.tpvpn.region, prof->config.tpvpn.conntype, prof->config.tpvpn.tpvpn_idx, unit);
 		system(cmd);
 		return 0;

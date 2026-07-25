@@ -9016,8 +9016,8 @@ netool(webs_t wp, char_t *urlPrefix, char_t *webDir, int arg, char_t *url, char_
 		return;
 	}
 	
-	snprintf(req_t.ver, sizeof(req_t.ver), ver);
-	snprintf(req_t.target, sizeof(req_t.target), target);
+	snprintf(req_t.ver, sizeof(req_t.ver), "%s", ver);
+	snprintf(req_t.target, sizeof(req_t.target), "%s", target);
 	snprintf(req_t.interface, sizeof(req_t.interface), "%s", (!strcmp(interface,"")) ? "" : interface);
 	
 	if (atoi(type) == REQ_PING_MODE) {
@@ -22431,6 +22431,11 @@ do_page_default(char *url, FILE *stream)
 {
 	char *page;
 	page = websGetVar(wp, "url","");
+	/* Only a page of this router: websRedirect() prefixes '/', so "/host" or
+	 * "\\host" would become a protocol-relative link to another site, and so
+	 * would anything with a scheme. */
+	if (page[0] == '/' || page[0] == '\\' || strstr(page, "://") || strchr(page, '\\'))
+		page = "index.asp";
 	websRedirect(stream, page);
 }
 
