@@ -1558,6 +1558,15 @@ void write_port_forwarding(FILE *fp, char *config, char *chain, char *lan_ip, ch
 			if (!_fw_field_safe(port) || !_fw_field_safe(dstip) || (lport && *lport && !_fw_field_safe(lport)))
 				continue;
 
+			/* srcip is emitted raw into the iptables-restore line too (the mac and
+			 * iprange branches copy the trailing text verbatim); give it the same
+			 * space-normalise + strict-charset gate as its siblings above. */
+			if (srcip && *srcip) {
+				_fw_strip_spaces(srcip);
+				if (!_fw_field_safe(srcip))
+					continue;
+			}
+
 			// Handle source type format
 			srcips[0] = '\0';
 			if (srcip && *srcip) {

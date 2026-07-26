@@ -239,6 +239,12 @@ void ipsec_samba_prof_fill(char *p_data)
     return;
 }
 
+/* forward decl (defined below): reduce a token in place to a shell-safe
+ * [alnum . _ - :] allowlist. profilename is emitted UNQUOTED into a root shell
+ * command ("ipsec down %s &"); the strip-meta helper keeps ; | & and spaces and
+ * is only safe inside quotes, so the profilename sink needs the strict form. */
+static void ipsec_strict_token(char *s);
+
 void ipsec_prof_fill(int prof_idx, char *p_data, ipsec_prof_type_t prof_type)
 {
     int i = 1;
@@ -252,6 +258,7 @@ void ipsec_prof_fill(int prof_idx, char *p_data, ipsec_prof_type_t prof_type)
     /*profilename*/    
     p_tmp = &(prof[prof_type][prof_idx].profilename[0]);
     ipsec_profile_str_parse(p_end, p_tmp, sizeof(prof[prof_type][prof_idx].profilename), &i);
+    ipsec_strict_token(p_tmp); /* shell-safe: profilename reaches an unquoted root sink (ipsec down %s &) */
     p_end += i ;
     /*remote_gateway_method*/
     p_tmp = &(prof[prof_type][prof_idx].remote_gateway_method[0]);

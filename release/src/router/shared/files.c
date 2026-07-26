@@ -208,7 +208,8 @@ static int _f_read_alloc(const char *path, char **buffer, int max, int z)
 					if (z) *(*buffer + max) = 0;
 					return max;
 				}
-				free(buffer);
+				free(*buffer);
+				*buffer = NULL;
 			}
 		}
 	}
