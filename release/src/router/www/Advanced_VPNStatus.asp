@@ -120,7 +120,7 @@ function display_vpn_data(){
 
 			client_server = ` (${vpnstate[`${vpnprefix}_addr`].shorter(42)}` +
 							` - port ${vpnstate[`${vpnprefix}_port`]}/${vpnstate[`${vpnprefix}_proto`]})`;
-			client_desc = `<span style="background-color: transparent; color: ${(isSupport("UI4") ? "blue" : "white")};">${vpnstate[`${vpnprefix}_desc`]}</span>`;
+			client_desc = `<span style="background-color: transparent; color: ${(isSupport("UI4") ? "blue" : "white")};">${htmlEnDeCode.htmlEncode(vpnstate[`${vpnprefix}_desc`])}</span>`;
 
 			switch (vpnstate[`${vpnprefix}_state`]) {
 				case "0":
@@ -323,7 +323,7 @@ function parseOVPNStatus(text, block, ipaddress, ripaddress){
 			if (clientTableEntries[i][8] == "UNDEF") {
 				clientTableEntries[i][8] = "";
 			}
-			code += '<td style="vertical-align:top; white-space:nowrap; text-align:left;">' + clientTableEntries[i][8] + '<br><span style="color: cyan; background: transparent;">' + clientTableEntries[i][0] +'</span></td>';
+			code += '<td style="vertical-align:top; white-space:nowrap; text-align:left;">' + htmlEnDeCode.htmlEncode(clientTableEntries[i][8]) + '<br><span style="color: cyan; background: transparent;">' + htmlEnDeCode.htmlEncode(clientTableEntries[i][0]) +'</span></td>';
 			// Real IP, Virtual IP
 			code += '<td style="vertical-align:top; text-align:left;">' + clientTableEntries[i][1] + '<br><span style="color: cyan; background: transparent;">' + clientTableEntries[i][2] +'</span></td>';
 			// dl/up amount
@@ -687,7 +687,7 @@ function parseWGSStatus(_block) {
 					if (is_wgsc_connected(fields[1].trim())) {
 						active_peer = 1;
 						have_peers = 1;
-						code += "<tr><th colspan='2' style='text-align:left;color:#FFCC00;text-decoration:bold;'>Peer: " + wgs_object[fields[1].trim()] + "</th></tr>";
+						code += "<tr><th colspan='2' style='text-align:left;color:#FFCC00;text-decoration:bold;'>Peer: " + htmlEnDeCode.htmlEncode(wgs_object[fields[1].trim()]) + "</th></tr>";
 						code += "<tr><th class='wgsheader' style='text-align:left;'>Public ID</td><td style='text-align:left;'>" + fields[1] + "</td></tr>";
 					} else {
 						active_peer = 0;

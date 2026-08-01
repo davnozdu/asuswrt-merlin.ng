@@ -550,7 +550,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 	sql_column_match_t* org_columns = match_columns;
 	for (i=0; i<match_columns_count; i++) {
 		char *column_name = match_columns->name;
-		if (is_valid_text(column_name)==FORMAT_ERROR) {
+		if (is_valid_sql_identifier(column_name)==FORMAT_ERROR) {
 			match_columns++;
 			continue;
 		}
@@ -582,7 +582,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 				}
 
 				//- ex. column_name=column_value
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -597,7 +597,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 				}
 
 				//- ex. column_name=column_value
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -612,7 +612,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 				}
 
 				//- ex. column_name=column_value
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -627,7 +627,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 				}
 
 				//- ex. column_name=column_value
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 
@@ -681,7 +681,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 	for (i=0; i<match_columns_count; i++) {
 
 		char *column_name = match_columns->name;
-		if (is_valid_text(column_name)==FORMAT_ERROR) {
+		if (is_valid_sql_identifier(column_name)==FORMAT_ERROR) {
 			match_columns++;
 			continue;
 		}
@@ -712,7 +712,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 					continue;
 				}
 
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -726,7 +726,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 					continue;
 				}
 
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -740,7 +740,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 					continue;
 				}
 
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -754,7 +754,7 @@ static char* gen_match_query_string(int match_columns_count, sql_column_match_t*
 					continue;
 				}
 
-				snprintf(buff, MAX_BUF_LEN, "%s%s'%s'", column_name, operation_symbol, match_columns->value.t);
+				sqlite3_snprintf(MAX_BUF_LEN, buff, "%s%s%Q", column_name, operation_symbol, match_columns->value.t);
 				break;
 
 			case COLUMN_TYPE_INT16:
@@ -813,7 +813,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 	for (i=0; i<columns_count; i++) {
 
 		char *column_name = columns->name;
-		if (is_valid_text(column_name)==FORMAT_ERROR) {
+		if (is_valid_sql_identifier(column_name)==FORMAT_ERROR) {
 			columns++;
 			continue;
 		}
@@ -839,7 +839,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -853,7 +853,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -867,7 +867,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -881,7 +881,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_INT16:
@@ -934,7 +934,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 	for (i=0; i<columns_count; i++) {
 
 		char *column_name = columns->name;
-		if (is_valid_text(column_name)==FORMAT_ERROR) {
+		if (is_valid_sql_identifier(column_name)==FORMAT_ERROR) {
 			columns++;
 			continue;
 		}
@@ -960,7 +960,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -974,7 +974,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -988,7 +988,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -1002,7 +1002,7 @@ static char* gen_upsert_query_string(int columns_count, sql_column_t* columns, c
 					continue;
 				}
 
-				snprintf(buff, MAX_VALUE_LEN, "%s='%s'", column_name, columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff, "%s=%Q", column_name, columns->value.t);
 				break;
 
 			case COLUMN_TYPE_INT16:
@@ -1582,7 +1582,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -1596,7 +1596,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -1610,7 +1610,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -1624,7 +1624,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_INT16:
@@ -1714,7 +1714,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_MAC:
@@ -1728,7 +1728,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_IP:
@@ -1742,7 +1742,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_TEXT_JSON:
@@ -1756,7 +1756,7 @@ int cosql_insert_table(sqlite3* pdb, int columns_count, sql_column_t* columns)
 					continue;
 				}
 
-				snprintf(buff_insert_value, MAX_VALUE_LEN, "'%s'", columns->value.t);
+				sqlite3_snprintf(MAX_VALUE_LEN, buff_insert_value, "%Q", columns->value.t);
 				break;
 
 			case COLUMN_TYPE_INT16:
@@ -2036,7 +2036,9 @@ int cosql_get_column_values(sqlite3* pdb,
 		strncat(sql_query, sql_between_data_time, sql_query_size - strlen(sql_query) - 1);
 	}
 
-	if (order_column_name!=NULL && order_by!=NULL) {
+	if (order_column_name!=NULL && order_by!=NULL &&
+		is_valid_sql_identifier(order_column_name)==FORMAT_OK &&
+		is_valid_sql_identifier(order_by)==FORMAT_OK) {	/* A2-SEC-002: raw ORDER BY; ASC/DESC + valid col pass */
 		strncat(sql_query, " ORDER BY ", 10);
 		strncat(sql_query, order_column_name, sql_query_size - strlen(sql_query) - 1);
 		strncat(sql_query, " ", 1);
@@ -2674,6 +2676,10 @@ int cosql_remove_data_between_column_value(sqlite3* pdb, const char* column_name
 
 	int ret = 0;
 
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* A2-SEC-002: column_name -> raw WHERE %s; reject injection */
+		return COSQL_ERROR;
+	}
+
 	ret = cosql_exec(pdb, "DELETE FROM %s WHERE %s BETWEEN %d AND %d", DATA_TABLE_NAME, column_name, start_value, end_value);
 	if( ret != COSQL_OK ) {
 		codbg("fail to remove data between time");
@@ -2836,6 +2842,10 @@ int cosql_backup_and_remove_data_between_column_value(sqlite3* src_pdb, sqlite3*
 	const char* column_name, int start_value, int end_value)
 {
 	if (src_pdb == NULL || dst_pdb == NULL || column_name == NULL) {
+		return COSQL_ERROR;
+	}
+
+	if (is_valid_sql_identifier(column_name)!=FORMAT_OK) {	/* A2-SEC-002: column_name -> raw WHERE/INSERT %s; reject injection */
 		return COSQL_ERROR;
 	}
 
