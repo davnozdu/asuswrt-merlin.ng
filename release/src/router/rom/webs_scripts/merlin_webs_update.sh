@@ -30,7 +30,7 @@ forsq=$(nvram get apps_sq)
 model=$(nvram get productid)
 model="$model#"
 
-if [ "$forsq" == "1" ]; then
+if [ "$forsq" = "1" ]; then
 	echo "---- update sq normal----" > /tmp/webs_upgrade.log
 	/usr/sbin/wget $wget_options $fwsite/test/manifest2.txt -O /tmp/wlan_update.txt
 else
@@ -66,7 +66,7 @@ echo "---- Stable available ${firmbase}.${firmver}.${buildno}_${extendno}----" >
 
 update_webs_state_info=$(nvram get webs_state_info)
 last_webs_state_info=$(nvram get webs_last_info)
-if [ "$firmbase" == "" ] || [ "$firmver" == "" ] || [ "$buildno" == "" ] || [ "$lextendno" == "" ]; then
+if [ "$firmbase" = "" ] || [ "$firmver" = "" ] || [ "$buildno" = "" ] || [ "$lextendno" = "" ]; then
 	nvram set webs_state_error=1	# exist no Info
 else
 
@@ -103,7 +103,7 @@ webs_state_flag=$(nvram get webs_state_flag)
 if [ "$webs_state_flag" -eq "1" ]; then
 	releasenote_file0_US=$(nvram get webs_state_info)_note.txt
 	releasenote_path0="/tmp/release_note0.txt"
-	if [ "$forsq" == "1" ]; then
+	if [ "$forsq" = "1" ]; then
 		echo "---- download SQ release note $fwsite/test/$releasenote_file0_US ----" >> /tmp/webs_upgrade.log
 		/usr/sbin/wget $wget_options $fwsite/test/$releasenote_file0_US -O $releasenote_path0
 		echo "---- $fwsite/test/$releasenote_file0 ----" >> /tmp/webs_upgrade.log

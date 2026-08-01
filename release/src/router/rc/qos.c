@@ -2893,7 +2893,7 @@ int start_cake(void)
 	/* Stop/start rules */
 	fprintf(f,
 		"#!/bin/sh\n"
-		"source /etc/cake-qos.conf\n\n"
+		". /etc/cake-qos.conf\n\n"	/* reaper: POSIX dot, not the bash-only `source` (don't depend on BusyBox ASH_BASH_COMPAT) */
 
 		"case \"$1\" in\n"
 		"start)\n"
