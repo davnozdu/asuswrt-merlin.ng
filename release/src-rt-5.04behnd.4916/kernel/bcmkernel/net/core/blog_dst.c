@@ -1,5 +1,13 @@
 #include <net/dst.h>
 
+/* Reaper: the two lookup-miss diagnostics in blog_get_dstentry_by_id() below are
+ * self-correcting (the caller re-learns the flow on the slow path) and flood syslog
+ * on every accelerator rebuild (restart_qos/firewall/wireless). This build ships
+ * BusyBox klogd, which forwards the whole kernel ring buffer with no severity/content
+ * filter, so they cannot be dropped in userspace. Gate them here; set to 1 to restore
+ * the prints when debugging dst-entry recycling. */
+#define REAPER_BLOG_DSTENTRY_ID_DEBUG 0
+
 /*------------------------------------------------------------------------------------
  *BLOG dst id map table and its related functions, adopted from bcmnetdev
  *-----------------------------------------------------------------------------------*/
@@ -254,11 +262,11 @@ struct dst_entry *blog_get_dstentry_by_id(uint16_t dstid)
             atomic_dec(&pentry->user_count);
             return dst;
         }
-        else
+        else if (REAPER_BLOG_DSTENTRY_ID_DEBUG)
             printk_ratelimited(KERN_DEBUG "%s:Trying to get dstentry pointer for idx[%d] dstid[%d] but zero user_count\n",
                     __FUNCTION__, idx, dstid);
     }
-    else
+    else if (REAPER_BLOG_DSTENTRY_ID_DEBUG)
     {
         printk_ratelimited(KERN_DEBUG "%s:dstid[%d] match fails entry.dstid[%d]\n",__FUNCTION__,
                 dstid, pentry->dstid.dstid);
