@@ -3353,7 +3353,10 @@ function _buildClientListRowHtml(profileArray, objID) {
 
 	const clientIpGroupCode = (p.ip != "0.0.0.0") ? `<div>${p.ip}</div>` : ``;
 	const clientIpLinkCode = (p.ip != "0.0.0.0") ? `${p.ip}` : `[${p.ip6}]`;
-	const clientNameEnCode = htmlEnDeCode.htmlEncode(p.name);
+	// htmlEncode leaves ' unescaped; also encode it so an apostrophe in a device
+	// name can't break out of the single-quoted value='...' attributes below
+	// (also fixes the display garble for names containing an apostrophe).
+	const clientNameEnCode = htmlEnDeCode.htmlEncode(p.name).replace(/'/g, '&#39;');
 	const isWebServer = !!(clientList[p.mac] && clientList[p.mac].isWebServer);
 	const ipMethod = (clientList[p.mac] && clientList[p.mac].ipMethod) || "";
 
