@@ -3891,6 +3891,31 @@ function control_dropdown_client_block(_containerID, _pullArrowID, _evt) {
 	}
 }
 
+/* reaper: a value that lands INSIDE onclick="fn('...')" crosses TWO parsers -
+ * the HTML attribute decoder runs first, then JS. HTML-encoding alone is
+ * therefore NOT protection in that position, which is the trap this dropdown
+ * fell into: clientList names are HTML-encoded at ingestion (see genClientList),
+ * so a DHCP hostname of  x');...;//  is stored as  x&#39;);...;//  , the
+ * attribute decoder turns it back into an apostrophe, and the JS string closes
+ * early. Verified in a browser: the payload ran on click.
+ * Decode to the raw text, escape THAT for a JS single-quoted string, then
+ * HTML-encode the result so the attribute itself stays well formed. */
+function jsAttrArg(_value) {
+	var raw = htmlEnDeCode.htmlDecode(String((_value == null) ? "" : _value));
+	raw = raw.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/[\r\n\u2028\u2029]/g, " ");
+	return htmlEnDeCode.htmlEncode(raw);
+}
+
+/* reaper: the stored name is HTML-ENCODED, so slicing it by character count can
+ * cut an entity in half (&#39; -> &#3) and render as garble. Slice the decoded
+ * text, then re-encode. */
+function clipEncodedName(_value, _max) {
+	var raw = htmlEnDeCode.htmlDecode(String((_value == null) ? "" : _value));
+	if(raw.length > _max)
+		raw = raw.substring(0, _max - 2) + "..";
+	return htmlEnDeCode.htmlEncode(raw);
+}
+
 //_callBackFunParam = mac>ip>..., _interfaceMode = all(wired, wll), wired, wl, _clientState = all, online, offline
 function showDropdownClientList(_callBackFun, _callBackFunParam, _interfaceMode, _containerID, _pullArrowID, _clientState) {
 	document.body.addEventListener("click", function(_evt) {control_dropdown_client_block(_containerID, _pullArrowID, _evt);})
@@ -3936,31 +3961,26 @@ function showDropdownClientList(_callBackFun, _callBackFunParam, _interfaceMode,
 		var code = "";
 		var clientName = (clientObj.nickName == "") ? clientObj.name : clientObj.nickName;
 		
-		code += '<a id=' + clientList[i] + ' title=' + clientList[i] + '>';
+		code += '<a id="' + htmlEnDeCode.htmlEncode(clientList[i]) + '" title="' + htmlEnDeCode.htmlEncode(clientList[i]) + '">';
 		if(_state == "online")
 			code += '<div onclick="' + _callBackFun + '(\'';
 		else if(_state == "offline")
 			code += '<div style="color:#A0A0A0" onclick="' + _callBackFun + '(\'';
 		for(var j = 0; j < param.length; j += 1) {
 			if(j == 0) {
-				code += getClientValue(param[j], clientObj);
+				code += jsAttrArg(getClientValue(param[j], clientObj));
 			}
 			else {
 				code += '\', \'';
-				code += getClientValue(param[j], clientObj);
+				code += jsAttrArg(getClientValue(param[j], clientObj));
 			}
 		}
 		code += '\');">';
 		code += '<strong>';
-		if(clientName.length > 32) {
-			code += clientName.substring(0, 30) + "..";
-		}
-		else {
-			code += clientName;
-		}
+		code += clipEncodedName(clientName, 32);
 		code += '</strong>';
 		if(_state == "offline")
-			code += '<strong title="Remove this client" style="float:right;margin-right:5px;cursor:pointer;" onclick="removeClient(\'' + clientObj.mac + '\', \'' + _containerID  + '_clientlist_dropdown_expand\', \'' + _containerID  + '_clientlist_offline\')">&times;</strong>';
+			code += '<strong title="Remove this client" style="float:right;margin-right:5px;cursor:pointer;" onclick="removeClient(\'' + jsAttrArg(clientObj.mac) + '\', \'' + jsAttrArg(_containerID)  + '_clientlist_dropdown_expand\', \'' + jsAttrArg(_containerID)  + '_clientlist_offline\')">&times;</strong>';
 		code += '</div><!--[if lte IE 6.5]><iframe class="hackiframe2"></iframe><![endif]--></a>';
 		return code;
 	};
