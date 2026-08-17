@@ -1,6 +1,36 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta3-dav21 (17-Aug-2026)
+ - UPDATED: ctrld 1.5.3 -> 1.5.5.  Upstream answers are now validated
+         against the request's question before being served or cached
+         (cache-poisoning defence), the DNS cache is partitioned by EDNS
+         Client Subnet so clients in different subnets no longer share an
+         entry, and the DoQ resolver no longer overwrites the upstream
+         RCODE/Question (failover now sees a real SERVFAIL).  1.5.3 -> 1.5.5
+         also brings CVE-2026-40898 (quic-go) plus hardening against
+         oversized DoH/DoH3/DoQ responses.  Our env-override speed patch was
+         regenerated for 1.5.5 and still applies cleanly.
+ - BACKPORT (Merlin 3006.102.8 beta3 -> 3006.102.8_2, software only, no
+         driver/blob merges - the GPL 102_39995 and 102_39848 merges and all
+         binary-blob commits are deliberately skipped, so wireless drivers
+         stay where they are):
+         OpenVPN 2.7.5; dropbear 2026.94; haveged 1.9.22; miniupnpd
+         2.3.10-g91eeeae, now built in two flavours (with and without IGDv2)
+         and picked at run time, plus upnp_ssdp_interval default 900s;
+         strongswan build recipes synced with upstream (fixes the missing
+         IPSEC executable); rc: ntpd restart method reworked in watchdog and
+         ntpd/ntpclient code synced; rc: IPv6 LAN prefix limited to a /64 on
+         non-multilan platforms and when no SDN is present; rc: DDNS IPv6
+         variable set on a successful custom DDNS update; rc: dropped boot
+         time upgrade code for pre-388 changes; webui: PPPoE Authentication
+         popup help, Temperature chart x-axis, 24h Traffic Monitor x-axis,
+         DHCP export on iOS, mastiff restart when toggling the Asusnat
+         tunnel.
+ - NOTE: the two upstream webui commits that repair the new QoS page and the
+         Wireless Pro page are NOT included - both only fix damage introduced
+         by the GPL 102_39995 merge, which this build does not carry.
+
 3006.102.8_beta3-dav20 (04-Jul-2026)
  - NEW: ctrld is now built from source in CI (pinned v1.5.3) with a local
          speed patch (release/src/router/ctrld/patches/) instead of shipping
