@@ -69,7 +69,7 @@ jobs:
             # discovery toggles can only be injected via env vars added by
             # release/src/router/ctrld/patches/. A stock binary silently ignores
             # those env vars, so falling back to the committed blob is safe.
-            CTRLD_TAG="v1.5.3"
+            CTRLD_TAG="v1.5.5"
             GO_VER="1.25.0"
             set +e
             (

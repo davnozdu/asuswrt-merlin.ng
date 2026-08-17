@@ -1,6 +1,6 @@
-VERSION 1.5.3
+VERSION 1.5.5
 linux_arm64 from github.com/Control-D-Inc/ctrld releases
 NOTE: this committed blob is the STOCK binary, kept only as a CI fallback.
-The workflow rebuilds ctrld from source (pinned v1.5.3) with the patches in
+The workflow rebuilds ctrld from source (pinned v1.5.5) with the patches in
 ../patches/ (env-var speed overrides for --cd mode) and replaces this file
 in the build tree before the firmware image is packed.

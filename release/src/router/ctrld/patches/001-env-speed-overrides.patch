@@ -1,8 +1,8 @@
 diff --git a/cmd/cli/cli.go b/cmd/cli/cli.go
-index b75856f..24934c5 100644
+index 4428d10..836ba58 100644
 --- a/cmd/cli/cli.go
 +++ b/cmd/cli/cli.go
-@@ -822,9 +822,38 @@ func processLogAndCacheFlags(v *viper.Viper, cfg *ctrld.Config) {
+@@ -811,9 +811,38 @@ func processLogAndCacheFlags(v *viper.Viper, cfg *ctrld.Config) {
  		cfg.Service.CacheEnable = true
  		cfg.Service.CacheSize = cacheSize
  	}
@@ -39,5 +39,5 @@ index b75856f..24934c5 100644
 +}
 +
  func netInterface(ifaceName string) (*net.Interface, error) {
- 	if ifaceName == "auto" {
+ 	if ifaceName == autoIface {
  		ifaceName = defaultIfaceName()
