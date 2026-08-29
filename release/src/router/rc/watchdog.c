@@ -8332,7 +8332,23 @@ void dnsmasq_check()
 	}
 #endif	//RTCONFIG_MULTILAN_CFG
 #ifdef RTCONFIG_DNSPRIVACY
-	else if (nvram_get_int("dnspriv_enable") && !pids("stubby")) {
+	/* Reaper 2026-08-28: this was an `else if`. Under RTCONFIG_MULTILAN_CFG the
+	 * dnsmasq half above is a per-SDN loop wrapped in `if (pmtl)`, so the else
+	 * bound to the MTLAN ALLOCATION - which succeeds on every normal tick. The
+	 * branch was therefore reachable only when INIT_MTLAN failed, i.e. never,
+	 * and a dead stubby was never restarted: DNS-over-TLS stayed down silently
+	 * until a reboot or an unrelated restart_stubby. The chaining did make sense
+	 * in the non-MULTILAN build below, where it read "dnsmasq is alive, so check
+	 * stubby instead"; it just did not survive the MULTILAN rewrite.
+	 * Made standalone in BOTH builds deliberately: stubby is an independent
+	 * daemon - dnsmasq forwards to it, neither starts the other - so its
+	 * liveness must not be conditioned on dnsmasq's. The only behaviour change
+	 * on the non-MULTILAN path is that a dead stubby may now be restarted in the
+	 * same tick as a dead dnsmasq, which is harmless and strictly better.
+	 * Limitation kept from stock: pids("stubby") matches by process name, so if
+	 * only ONE of several per-SDN instances dies this still sees a live stubby
+	 * and will not restart it. */
+	if (nvram_get_int("dnspriv_enable") && !pids("stubby")) {
 #if defined(RTL_WTDOG)
 		stop_rtl_watchdog();
 #endif
