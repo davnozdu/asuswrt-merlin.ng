@@ -99,6 +99,11 @@ typedef struct DSI {
      * write/read just write/read data */
     pid_t  (*proto_open)(struct DSI *);
     void   (*proto_close)(struct DSI *);
+
+    /* Unconsumed write payload already received in commands. Keep it until
+     * dsi_write() delivers it, even when the caller supplies a smaller buffer.
+     * Private Netatalk state; no change to the DSI wire format. */
+    size_t writebuf_offset, writebuf_len;
 } DSI;
 
 /* DSI flags */
