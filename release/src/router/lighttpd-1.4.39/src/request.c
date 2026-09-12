@@ -792,7 +792,24 @@ int http_request_parse(server *srv, connection *con) {
 						buffer_copy_string_len(key_b, key, key_len);
 
 						if (NULL != (ds = (data_string *)array_get_element(con->request.headers, key_b->ptr))) {
+							/* CVE-2018-25103 (Reaper v3.1.5, review R12): the raw char*
+							 * aliases below were taken when this header was first
+							 * inserted; appending a folded line can reallocate
+							 * ds->value->ptr and leave them dangling (use-after-free
+							 * on the next header, or in the handlers). Upstream
+							 * restructured the parser to defer per-header handling
+							 * until folding is complete (df8e4f95); this is the
+							 * minimal equivalent for 1.4.39: note which aliases
+							 * point into this value, append, rebind. */
+							int ct  = con->request.http_content_type == ds->value->ptr;
+							int ims = con->request.http_if_modified_since == ds->value->ptr;
+							int inm = con->request.http_if_none_match == ds->value->ptr;
+							int rng = con->request.http_range && con->request.http_range == ds->value->ptr + 6;
 							buffer_append_string(ds->value, value);
+							if (ct)  con->request.http_content_type = ds->value->ptr;
+							if (ims) con->request.http_if_modified_since = ds->value->ptr;
+							if (inm) con->request.http_if_none_match = ds->value->ptr;
+							if (rng) con->request.http_range = ds->value->ptr + 6;
 						}
 
 						buffer_free(key_b);
