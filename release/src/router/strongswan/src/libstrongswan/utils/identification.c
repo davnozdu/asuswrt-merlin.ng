@@ -1335,10 +1335,10 @@ METHOD(identification_t, clone_, identification_t*,
 	private_identification_t *clone = malloc_thing(private_identification_t);
 
 	memcpy(clone, this, sizeof(private_identification_t));
-	if (this->encoded.len)
-	{
-		clone->encoded = chunk_clone(this->encoded);
-	}
+	/* always clone: an empty encoding may still own a buffer (e.g. malloc(0) from
+	 * chunk_from_hex() for "@#"), which the memcpy above would otherwise share and
+	 * both destroy() calls would free */
+	clone->encoded = chunk_clone(this->encoded);
 	return &clone->public;
 }
 
