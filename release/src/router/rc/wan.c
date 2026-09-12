@@ -3377,6 +3377,11 @@ void wan6_up(const char *pwan_ifname)
 	wan_unit = get_wan6_unit(wan_ifname);
 	snprintf(prefix, sizeof(prefix), "wan%d_", wan_unit);
 
+	/* An interface just gained IPv6, so any "this WAN has no IPv6" hold the DDNS
+	 * retry path put itself on is stale. Clearing it here is what lets that hold
+	 * be self-healing instead of polled (field 2026-09-12). */
+	nvram_unset("ddns_ipv6_absent");
+
 	service = get_ipv6_service_by_unit(wan_unit);
 	switch (service) {
 	case IPV6_NATIVE_DHCP:

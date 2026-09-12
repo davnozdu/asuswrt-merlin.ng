@@ -5058,6 +5058,9 @@ start_ddns(char *caller, int isAidisk)
 		if (caller == NULL) { // not from watchdog
 			//logmessage("ddns", "Reset DDNS Retry.\n");
 			nvram_set("ddns_check_retry", "10");
+			/* An operator or an event asked for this run, so re-evaluate the
+			 * no-IPv6-on-this-WAN hold below rather than inheriting it. */
+			nvram_unset("ddns_ipv6_absent");
 		}
 	}
 	else { // AiDisk register DDNS
@@ -5114,12 +5117,32 @@ start_ddns(char *caller, int isAidisk)
 	wan_ip = nvram_safe_get(strcat_r(prefix, "ipaddr", tmp));
 	wan_ifname = get_wan_ifname(unit);
 #if defined(RTCONFIG_IPV6) && defined(RTCONFIG_INADYN)
-	if (nvram_get_int("ddns_ipv6_update")
-		&& ipv6_enabled() && (_get_ipv6_addr(wan_ifname, ip6_addr, sizeof(ip6_addr)) != 0))
-	{
-		logmessage(log_title, "%s has not yet obtained an WAN IPv6 address.(%d)", wan_ifname, ddns_check_retry);
-		if (!isAidisk)
-			nvram_unset("ddns_ipv6_updated");
+	/* Field 2026-09-12, two WANs with divergent v4/v6: this tests the DDNS WAN
+	 * unit's own interface, while ipv6_enabled() is a GLOBAL test. A box whose
+	 * IPv6 lives on the OTHER WAN lands here on every single run, and "not yet"
+	 * is then a permanent state, not the transient one the retry machinery was
+	 * built for. Two consequences, both closed here. It said so once per watchdog
+	 * tick for the life of the boot; and unsetting ddns_ipv6_updated meant
+	 * watchdog's "already updated, exit DDNS Retry" test could never pass, so
+	 * DDNS was stopped and restarted every 30 s over a condition no amount of
+	 * retrying could change. Report it on the state CHANGE, and record the state
+	 * so watchdog can stand down. Recovery needs no polling: wan6_up() clears the
+	 * flag when an interface actually gains IPv6, and any non-watchdog
+	 * start_ddns() clears it too. */
+	if (nvram_get_int("ddns_ipv6_update") && ipv6_enabled()) {
+		if (_get_ipv6_addr(wan_ifname, ip6_addr, sizeof(ip6_addr)) != 0) {
+			if (!nvram_match("ddns_ipv6_absent", "1")) {
+				logmessage(log_title, "%s has no WAN IPv6 address - IPv6 updates are on hold "
+				                      "until it gets one.(%d)", wan_ifname, ddns_check_retry);
+				nvram_set("ddns_ipv6_absent", "1");
+			}
+			if (!isAidisk)
+				nvram_unset("ddns_ipv6_updated");
+		}
+		else if (nvram_match("ddns_ipv6_absent", "1")) {
+			logmessage(log_title, "%s now has a WAN IPv6 address - resuming IPv6 updates.", wan_ifname);
+			nvram_unset("ddns_ipv6_absent");
+		}
 	}
 #endif
 
@@ -5190,7 +5213,12 @@ start_ddns(char *caller, int isAidisk)
 #endif
 
 	snprintf(ipv6_service_cur, sizeof(ipv6_service_cur), "%s", nvram_safe_get(ipv6_nvname_by_unit("ipv6_service", unit)));
-	logmessage(log_title, "current ipv6_service: %s | old ipv6_service: %s\n", ipv6_service_cur, nvram_safe_get("ddns_ipv6_service_old"));
+	/* Only interesting when it CHANGED - which is what the branch below acts on.
+	 * Printed unconditionally this read "dhcp6 | dhcp6" on every run and was one
+	 * of the four lines the 30 s retry loop was emitting (field 2026-09-12). */
+	if (strcmp(ipv6_service_cur, nvram_safe_get("ddns_ipv6_service_old")) != 0)
+		logmessage(log_title, "ipv6_service changed: %s -> %s",
+		           nvram_safe_get("ddns_ipv6_service_old"), ipv6_service_cur);
 
 	if (inet_addr_(wan_ip) == inet_addr_(nvram_safe_get("ddns_ipaddr")) &&
 		strcmp(nvram_safe_get("ddns_server_x"), nvram_safe_get("ddns_server_x_old")) == 0 &&

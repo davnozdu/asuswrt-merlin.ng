@@ -7919,8 +7919,14 @@ void ddns_check(void)
 
 	if (wan_unit == last_unit && nvram_match("ddns_updated", "1")) { //already updated success
 #if defined(RTCONFIG_IPV6) && defined(RTCONFIG_INADYN)
-		/* not enable IPv6 or IPv6 already updated success */
-		if (!ipv6_enabled() || nvram_match("ddns_ipv6_update", "0") || (ipv6_enabled() && nvram_match("ddns_ipv6_update", "1") && nvram_match("ddns_ipv6_updated", "1"))) {
+		/* not enable IPv6 or IPv6 already updated success - or the DDNS WAN has
+		 * no IPv6 address at all, which start_ddns() flags after saying so once.
+		 * Without that last test a box whose IPv6 sits on the OTHER WAN never
+		 * satisfied this, fell through to the retry countdown, and restarted DDNS
+		 * every 30 s forever while its IPv4 record was already correct and its
+		 * IPv6 record was unobtainable (field 2026-09-12). */
+		if (!ipv6_enabled() || nvram_match("ddns_ipv6_update", "0") || (ipv6_enabled() && nvram_match("ddns_ipv6_update", "1") && nvram_match("ddns_ipv6_updated", "1"))
+			|| nvram_match("ddns_ipv6_absent", "1")) {
 			//logmessage("watchdog", "IPv4/IPv6 already updated success, exit DDNS Retry.\n");
 			return;
 		}
