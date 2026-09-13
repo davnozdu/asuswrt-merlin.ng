@@ -96,6 +96,10 @@ static int copyapplfile(int sfd, int dfd, char *mpath, u_short mplen)
         memcpy( &len, p, sizeof(len));
         len = ntohs( len );
         p += sizeof( len );
+        if ( len > sizeof( buf ) - (size_t)( p - buf )) {
+            cc = -1;
+            break;
+        }
         if (( cc = read( sa.sdt_fd, p, len )) < len ) {
             break;
         }
@@ -414,6 +418,10 @@ int afp_getappl(AFPObj *obj, char *ibuf, size_t ibuflen _U_, char *rbuf, size_t 
         memcpy( &len, p, sizeof( len ));
         len = ntohs( len );
         p += sizeof( u_short );
+        if ( len > sizeof( obj->oldtmp ) - (size_t)( p - buf )) {
+            cc = -1;
+            break;
+        }
         if (( cc = read( sa.sdt_fd, p, len )) < len ) {
             break;
         }

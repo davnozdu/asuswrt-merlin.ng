@@ -390,10 +390,11 @@ static int new_ad_header(struct adouble *ad, const char *path, struct stat *stp,
 /* -------------------------------------
    read in the entries
 */
-static void parse_entries(struct adouble *ad, char *buf, uint16_t nentries)
+static int parse_entries(struct adouble *ad, char *buf, uint16_t nentries)
 {
     uint32_t   eid, len, off;
     int        warning = 0;
+    int        ret = 0;
 
     /* now, read in the entry bits */
     for (; nentries > 0; nentries-- ) {
@@ -410,14 +411,21 @@ static void parse_entries(struct adouble *ad, char *buf, uint16_t nentries)
         if (eid
             && eid < ADEID_MAX
             && off < sizeof(ad->ad_data)
-            && (off + len <= sizeof(ad->ad_data) || eid == ADEID_RFORK)) {
+            && (len <= sizeof(ad->ad_data) - off || eid == ADEID_RFORK)) {
             ad->ad_eid[ eid ].ade_off = off;
             ad->ad_eid[ eid ].ade_len = len;
-        } else if (!warning) {
-            warning = 1;
-            LOG(log_warning, logtype_ad, "parse_entries: bogus eid: %d", eid);
+        } else {
+            /* CVE-2022-23121: a rejected entry was logged and skipped, leaving
+             * the caller to carry on with a header it believed had parsed. */
+            ret = -1;
+            if (!warning) {
+                warning = 1;
+                LOG(log_warning, logtype_ad, "parse_entries: bogus eid: %u off: %u len: %u",
+                    eid, off, len);
+            }
         }
     }
+    return ret;
 }
 
 /* this reads enough of the header so that we can figure out all of
@@ -475,7 +483,11 @@ static int ad_header_read(const char *path _U_, struct adouble *ad, const struct
     /* figure out all of the entry offsets and lengths. if we aren't
      * able to read a resource fork entry, bail. */
     nentries = len / AD_ENTRY_LEN;
-    parse_entries(ad, buf, nentries);
+    if (parse_entries(ad, buf, nentries) != 0) {
+        LOG(log_error, logtype_ad, "ad_header_read: bogus entry in AppleDouble header.");
+        errno = EIO;
+        return -1;
+    }
     if (!ad_getentryoff(ad, ADEID_RFORK)
         || (ad_getentryoff(ad, ADEID_RFORK) > sizeof(ad->ad_data))
         ) {
@@ -595,7 +607,11 @@ static int ad_header_read_osx(const char *path _U_, struct adouble *ad, const st
     }
 
     nentries = len / AD_ENTRY_LEN;
-    parse_entries(&adosx, buf, nentries);
+    if (parse_entries(&adosx, buf, nentries) != 0) {
+        LOG(log_error, logtype_ad, "ad_header_read_osx: bogus entry in AppleDouble header.");
+        errno = EIO;
+        return -1;
+    }
 
     if (ad_getentryoff(&adosx, ADEID_RFORK) == 0
         || ad_getentryoff(&adosx, ADEID_RFORK) > sizeof(ad->ad_data)
@@ -662,7 +678,12 @@ static int ad_header_read_ea(const char *path, struct adouble *ad, const struct 
     }
 
     /* Now parse entries */
-    parse_entries(ad, buf + AD_HEADER_LEN, nentries);
+    if (parse_entries(ad, buf + AD_HEADER_LEN, nentries) != 0) {
+        LOG(log_error, logtype_ad, "ad_header_read_ea(\"%s\"): bogus entry in metadata EA",
+            fullpathname(path));
+        errno = EINVAL;
+        EC_FAIL;
+    }
 
     if (nentries != ADEID_NUM_EA
         || !ad_entry(ad, ADEID_FINDERI)
