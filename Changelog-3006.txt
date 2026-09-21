@@ -1,6 +1,66 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta3-dav22 (21-Sep-2026)
+ - NEW: GT-BE98 now builds on its own Asus GPL.  Asus has finally published a
+         GPL for the plain GT-BE98 (GPL_GT-BE98_3.0.0.6.102.39274-ga491289_
+         1525-g8972c_BB0B); until now our blobs were borrowed - wl.o/dhd.o
+         came from the RT-BE98 39099 merge, and rc/prebuild/private.o plus
+         shared/prebuild/spwenc.o were byte-identical copies of the
+         GT-BE98_PRO files because no GT-BE98 build existed.  All of that is
+         now the model's own, mutually consistent set.
+         Kernel/Wi-Fi side: wl.o, dhd.o, bcm_enet.o, wfd.o, rtl8372.o,
+         rdpa.o, bdmf.o, bcm_mpm.o, wlc_types.h (r834507, was r831530),
+         libwlcsm.so and acsd2.
+         Userspace side: 34 blobs - broadcom.o, private.o, spwenc.o, the
+         amas_* / roamast / wps_pbcd_be / frs_service / dsl_fb objects,
+         cfg_mnt, networkmap, aaews + mastiff, ahs, bwdpi, libasusnatnl,
+         the eight lighttpd mod_* modules, httpd web_hook.o, priv_webapi.o
+         and hw_auth.o.
+ - NOTE: the WLAN driver version itself does NOT move - it is still
+         17.10.369.39012 (r839077), SDK BB0B.  This is the same driver
+         rebuilt for GT-BE98 plus the BSP fixes listed in the GPL's
+         patch.version.  Expect correctness, not new Wi-Fi features.
+ - NOTE: files shared by every 4916 model were deliberately left alone, since
+         only GT-BE98 can be tested here: gdx_hw.o, the wl utility, dhcpfwd,
+         wlioctl.h and hnddma.c.  Also untouched: the 6813 kernel config
+         (ours carries the CAKE/TEE/ematch additions), and all bootloader,
+         DDR and dpfe blobs.  Radio firmware (rtecdc.bin) is not shipped in
+         any Asus GPL and stays as it is; the driver's EPI version did not
+         move, so it still matches.
+ - UPDATED: ctrld 1.5.5 -> 1.5.7.  1.5.6 defaults the metrics server to
+         loopback (a listener address with no host no longer serves
+         unauthenticated metrics to the whole LAN) and redacts the
+         provisioning token in logs - we run in --cd mode, so that token is
+         the Control D device token.  1.5.6 also adds stable provisioning
+         failure codes and startup verification in "ctrld status".  The rest
+         of 1.5.6 and all of 1.5.7 is macOS/Windows intercept-mode work that
+         does not apply here.  Our speed patch still applies cleanly.
+ - BACKPORT (Merlin 3006.102.8_2 -> 3006.102.8_4, software only, no
+         driver/blob/GPL merges - the 102_39995 and 102_39848 blob merges are
+         still deliberately skipped, so the wireless drivers are the GT-BE98
+         GPL set above and nothing else):
+         httpd: multiple potential buffer overruns fixed, missing libovpn
+         include, unused variable dropped; shared: buffer overruns in
+         remove_dups() fixed and set_crt_parsed() rewritten to handle buffer
+         limits; libovpn: static key generated when TLS control channel
+         security is tls-auth with a non-V1 static key, EasyRSA 3 support
+         under OpenSSL 3.x, build warnings and a logged error message fixed;
+         easy-rsa: EasyRSA 3 added for OpenSSL 3.x; OpenVPN 2.7.5 -> 2.7.6;
+         miniupnpd 2.3.10 -> 2.3.11 plus the old WANPPPConnection legacy
+         kludge disabled; rc: IPv6 passed as second argument to ddns-start,
+         netstat-nat no longer run with a bare "-"; reverted Asus' UPnP rule
+         patch for port forwarding; build: fdt binaries no longer written to
+         $HOME and fdt install skipped entirely, libimobiledevice compiled in
+         parallel; webui: MultiWAN PPPoE Authentication popup help, empty TTL
+         popup hints removed, swap table class typo, sysdep model files
+         resynced, stray web files removed from the router folder.
+ - NOTE: 102.9 (alpha1/alpha2/beta1) is NOT included.  It carries OpenSSL 3.5
+         plus a shim, and the GT-BE98 image is already close to the 63 MiB
+         slot limit - the ROG flavour with baked-in ctrld does not fit as it
+         is.  The HW AQM feature from that line applies to 4916 and needs no
+         new blobs, so it can be taken separately later.
+
 3006.102.8_beta3-dav21 (17-Aug-2026)
  - UPDATED: ctrld 1.5.3 -> 1.5.5.  Upstream answers are now validated
          against the request's question before being served or cached

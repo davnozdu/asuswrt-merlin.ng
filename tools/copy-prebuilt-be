@@ -160,37 +160,83 @@ then
         ARCH="_arm"
         HND="_behnd"
 
-	# Must be done first, since we will add hnd_extra files later on
-	rsync -a --del release/src-rt-5.04behnd.4916/router-sysdep/ $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC --exclude "stress/Makefile" --exclude "wlc_types.h"
-	rsync -a --del release/src-rt-5.04behnd.4916/bootloaders/obj/ $REPO/release/src-rt-5.04behnd.4916/bootloaders/obj.$BUILD_NAME_LC
-#	cp release/src-rt-5.04behnd.4916/wl/exe/prebuilt/* $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt/
-	cp release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/main/src/wl/exe/prebuilt/* $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/addvtoken $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/$BUILD_NAME/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/lzop $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/$BUILD_NAME/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/cmplzma $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/lzmacmd $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt//cmplzma $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/mkfs.ubifs $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/mksquashfs $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/hostTools/prebuilt/ubinize $REPO/release/src-rt-5.04behnd.4916/hostTools/prebuilt/
-	cp release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/main/components/apps/acsdv2/prebuilt/* $REPO/release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/main/components/apps/acsdv2/prebuilt/$BUILD_NAME/
+	BE=release/src-rt-5.04behnd.4916
+	RBE=$REPO/release/src-rt-5.04behnd.4916
+	HNDX=$RBE/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt
 
-	cp -ar release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/sys/src/dongle/bin/6717a0/release/* $REPO/release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/sys/src/dongle/sysdeps/$BUILD_NAME/6717a0/
-        cp -ar release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/sys/src/dongle/bin/6726b0/release/* $REPO/release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/wl/impl101/sys/src/dongle/sysdeps/$BUILD_NAME/6726b0/
+	# The WL impl directory moves with the SDK: impl101 on the older GPLs,
+	# impl103 from GT-BE98 102_39274 onwards.  Find it instead of hardcoding.
+	WLIMPL=$(cd $BE/bcmdrivers/broadcom/net/wl && ls -d impl* 2>/dev/null | sort | tail -1)
+	echo "*** WL impl directory is $WLIMPL"
 
+	# Copies a file only if the GPL actually ships it.  Asus varies what is
+	# included per model and per release, and a missing optional blob must
+	# not look like a successful copy.
+	maybe_cp() {
+		if [ -e "$1" ]; then cp -a "$1" "$2"; else echo "    skipped (absent): $1"; fi
+	}
 
-	cp release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/mpm/impl1/bcm_mpm.o $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt/
-	cp release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/pktrunner/impl2/pktrunner.o $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt/
+	# Must be done first, since we will add hnd_extra files later on.
+	# Careful: --del also wipes the objects we gather into hnd_extra/prebuilt
+	# from elsewhere in the tree, so every one of them is re-copied below.
+	rsync -a --del $BE/router-sysdep/ $RBE/router-sysdep.$BUILD_NAME_LC --exclude "stress/Makefile" --exclude "wlc_types.h"
+	rsync -a --del $BE/bootloaders/obj/ $RBE/bootloaders/obj.$BUILD_NAME_LC
 
-        aarch64-buildroot-linux-gnu-strip --strip-debug $REPO/release/src-rt-5.04behnd.4916/router-sysdep.$BUILD_NAME_LC/hnd_extra/prebuilt/*.o
+	cp $BE/hostTools/prebuilt/addvtoken $RBE/hostTools/prebuilt/$BUILD_NAME/
+	cp $BE/hostTools/prebuilt/lzop $RBE/hostTools/prebuilt/$BUILD_NAME/
+	cp $BE/hostTools/prebuilt/cmplzma $RBE/hostTools/prebuilt/
+	cp $BE/hostTools/prebuilt/lzmacmd $RBE/hostTools/prebuilt/
+	cp $BE/hostTools/prebuilt/mkfs.ubifs $RBE/hostTools/prebuilt/
+	cp $BE/hostTools/prebuilt/mksquashfs $RBE/hostTools/prebuilt/
+	cp $BE/hostTools/prebuilt/ubinize $RBE/hostTools/prebuilt/
+
+	cp $BE/bcmdrivers/broadcom/net/wl/$WLIMPL/main/components/apps/acsdv2/prebuilt/* $RBE/bcmdrivers/broadcom/net/wl/$WLIMPL/main/components/apps/acsdv2/prebuilt/$BUILD_NAME/
+
+	# The wl utility and the radio firmware are not in every GPL - 102_39274
+	# has an empty wl/exe/prebuilt and no sys/ directory at all.
+	for f in $BE/bcmdrivers/broadcom/net/wl/$WLIMPL/main/src/wl/exe/prebuilt/*; do
+		maybe_cp "$f" $HNDX/
+	done
+	for DONGLE in 6717a0 6726b0; do
+		SRC=$BE/bcmdrivers/broadcom/net/wl/$WLIMPL/sys/src/dongle/bin/$DONGLE/release
+		if [ -d "$SRC" ]; then
+			cp -ar $SRC/* $RBE/bcmdrivers/broadcom/net/wl/$WLIMPL/sys/src/dongle/sysdeps/$BUILD_NAME/$DONGLE/
+		else
+			echo "    no radio firmware for $DONGLE in this GPL - keeping ours"
+		fi
+	done
+
+	# hnd_extra/prebuilt is our own collection point.  These objects live all
+	# over the GPL tree, so the rsync above neither brings them in nor keeps
+	# the copies it just deleted.  rtl8372.o is GT-BE98 only.
+	maybe_cp $BE/bcmdrivers/broadcom/char/mpm/impl1/bcm_mpm.o $HNDX/
+	maybe_cp $BE/bcmdrivers/broadcom/char/pktrunner/impl2/pktrunner.o $HNDX/
+	maybe_cp $BE/kernel/linux-4.19/drivers/char/rtl8372/rtl8372.o $HNDX/
+	maybe_cp $BE/rdp/drivers/bdmf/bdmf.o $HNDX/
+	maybe_cp $BE/rdp/projects/BCM6813/target/rdpa/rdpa.o $HNDX/
+	maybe_cp $BE/rdp/projects/BCM6813/target/rdpa_gpl/rdpa_gpl.o $HNDX/
+	maybe_cp $BE/rdp/projects/BCM6813/target/rdpa_user/rdpa_usr.o $HNDX/
+	maybe_cp release/src/router/hnd_extra/prebuilt/bcm_enet.o $HNDX/
+	maybe_cp release/src/router/hnd_extra/prebuilt/wfd.o $HNDX/
+	maybe_cp release/src/router/hnd_extra/prebuilt/wlc_types.h $HNDX/
+
+	# Asus ships these already stripped, so this is only a safety net.
+	if command -v aarch64-buildroot-linux-gnu-strip >/dev/null 2>&1; then
+		aarch64-buildroot-linux-gnu-strip --strip-debug $HNDX/*.o
+	else
+		echo "*** aarch64 strip not found - leaving the objects as shipped"
+	fi
+
+# Deliberately NOT taken from the GPL, because every 4916 model shares them
+# and only the model being merged can be tested:
+#	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/gdx/impl1/prebuilt/gdx_hw.o
+#	release/src/router/dhcpfwd/prebuild/dhcpfwd
 
 # Found in bcmdrivers - do we have to copy/sort into prebuild?  They don't show anywhere else in a compiled tree, so might not be used.
 #	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/cmdlist/impl1/cmdlist.o
 #	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/pktflow/impl1/pktflow.o
 #	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/pon_drv/impl2/bcm_pondrv.o
 #	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/char/vlan/impl2/bcmvlan.o
-
-#	release/src-rt-5.04behnd.4916/bcmdrivers/broadcom/net/gdx/impl1/prebuilt/gdx_hw.o
 
 else
 	echo "Unrecognized BUILD_NAME!"
