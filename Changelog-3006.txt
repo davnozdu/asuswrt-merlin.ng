@@ -1,7 +1,7 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_beta3-dav23 (21-Sep-2026)
+3006.102.8_beta4-dav23 (21-Sep-2026)
  - BACKPORT (Merlin 3006.102.9 alpha1 -> beta1, 25 commits, still software
          only - the 102_39995 and 102_39848 blob merges stay skipped, so the
          wireless drivers remain the GT-BE98 102_39274 set from dav22):
