@@ -1,7 +1,7 @@
 /*
  * Forward declarations for commonly used wl driver structs
  *
- * Copyright (C) 2023, Broadcom. All Rights Reserved.
+ * Copyright (C) 2024, Broadcom. All Rights Reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,7 +18,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: wlc_types.h 831530 2023-10-19 14:53:44Z $
+ * $Id: wlc_types.h 834507 2023-12-20 10:58:53Z $
  */
 
 #ifndef _wlc_types_h_
@@ -354,6 +354,7 @@ typedef struct wlc_chctx_info wlc_chctx_info_t;
 typedef struct wlc_pmq_info wlc_pmq_info_t;
 
 typedef struct wlc_ftm_hw_info wlc_ftm_hw_info_t;
+typedef struct wlc_pasn_info wlc_pasn_info_t;
 
 /* Inteface version mapping for versioned pfn structures */
 #undef PFN_SCANRESULT_VERSION
@@ -470,6 +471,7 @@ typedef struct bme_info_s bme_info_t;
 typedef struct wlc_offload wlc_offload_t;
 
 typedef struct wlc_sts_xfer_info wlc_sts_xfer_info_t;
+typedef struct wlc_iem_cbparm_ml_rpt wlc_iem_cbparm_ml_rpt_t;
 
 typedef struct wlc_deauth_send_cbargs wlc_deauth_send_cbargs_t;
 typedef struct wlc_macreq_info wlc_macreq_info_t;
@@ -483,9 +485,12 @@ typedef struct taf_scheduler_public taf_scheduler_public_t;
 
 typedef struct wlc_rlm_rate_store wlc_rlm_rate_store_t;
 typedef struct ratesel_txparams ratesel_txparams_t;
-typedef wl_mlo_tid_map_neg_v1_t         wl_mlo_tid_map_neg_t;
-typedef wl_mlo_info_v1_t		wl_mlo_info_basic_t;
-typedef wl_mlo_scb_info_v1_t		wl_mlo_scb_info_t;
+
+typedef wl_mlo_tid_map_neg_v1_t	wl_mlo_tid_map_neg_t;
+typedef wl_mlo_info_v1_t	wl_mlo_info_basic_t;
+typedef wl_mlo_scb_info_v1_t	wl_mlo_scb_info_t;
+
+typedef struct wlc_scb_mlo_stats wlc_scb_mlo_stats_t;
 
 typedef struct wlc_qosmgmt_info wlc_qosmgmt_info_t;
 typedef struct wlc_lsa_info wlc_lsa_info_t;
