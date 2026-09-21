@@ -1,6 +1,47 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta3-dav23 (21-Sep-2026)
+ - BACKPORT (Merlin 3006.102.9 alpha1 -> beta1, 25 commits, still software
+         only - the 102_39995 and 102_39848 blob merges stay skipped, so the
+         wireless drivers remain the GT-BE98 102_39274 set from dav22):
+ - NEW: OpenSSL 3.5.8 replaces OpenSSL 1.1.1 as the system crypto library,
+         together with Merlin's openssl11-compat shim that keeps the Asus
+         closed-source binaries linking against the old 1.1 ABI.  GT-BE98 does
+         not override OPENSSL11 in target.mak, so config_base's
+         RTCONFIG_OPENSSL35=y applies and this really does switch.  The 1.1.1
+         tree is still present and still carries its two ported CVE fixes.
+ - NEW: HW-accelerated AQM through Broadcom's Traffic Manager - shapes the
+         upload queue in the network processor instead of the CPU, so
+         bufferbloat control keeps hardware acceleration.  4916 supports PI2.
+         Not usable from the web UI in this build, see the NOTE below; set
+         qos_type=8 by nvram to try it.
+ - NEW: Tor now also redirects IPv6 LAN clients.
+ - UPDATED: OpenVPN 2.7.6 -> 2.7.7; tor 0.4.9.11; amtm 7.0; zoneinfo to IANA
+         tzdata 2026c.
+ - UPDATED: kernel - backported the upstream Brahma-B53 mitigation whitelists.
+ - FIXED: libovpn enforces a DH of at least 2048-bit, which is what OpenVPN
+         asks of OpenSSL 3.x at its security level - relevant now that we are
+         on 3.5.  httpd/webui: Wireless Log in WISP, Repeater and Media Bridge
+         modes, DFS detection; QoS: flushed cached flows when stopping, Asus'
+         AdaptiveQoS Bandwidth page fixes; rc: no longer force-enables FTP TLS
+         on firmware upgrades; webui: OpenVPN Server and Tor toggles reworked,
+         System Log stops querying the router when auto-refresh is off, OVPN
+         server state detected correctly at page load.
+ - NOTE: the two webui commits that add the HW AQM control to the QoS page
+         (8fcd694a8e, 3480f3df8a) are NOT included.  They are written against
+         the QoS_EZQoS.asp that GPL 102_39995 rewrote, and we never merged
+         39995 - upstream reindented the whole file, so a 75-line change
+         arrives as a 1451-line conflict.  The page structure is otherwise
+         compatible (int_type / trad_type / cake_type / GeForce_type all
+         exist here), so this can be hand-ported later; doing it blind on a
+         page that cannot be tested here was not worth the risk.
+ - NOTE: this is the first build where the image size is expected to move
+         beyond the few tens of KB that dav22 added.  OpenSSL 3.5 plus the
+         compat shim is a different order of change, and the GT-BE98 slot is
+         63 MiB with roughly 1 MiB free on UBI.  Check the artifact size
+         before flashing, particularly for the ROG flavour.
+
 3006.102.8_beta3-dav22 (21-Sep-2026)
  - NEW: GT-BE98 now builds on its own Asus GPL.  Asus has finally published a
          GPL for the plain GT-BE98 (GPL_GT-BE98_3.0.0.6.102.39274-ga491289_
