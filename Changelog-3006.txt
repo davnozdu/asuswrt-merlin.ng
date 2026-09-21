@@ -12,11 +12,25 @@ Asuswrt-Merlin 3006.xxx Changelog
          Kernel/Wi-Fi side: wl.o, dhd.o, bcm_enet.o, wfd.o, rtl8372.o,
          rdpa.o, bdmf.o, bcm_mpm.o, wlc_types.h (r834507, was r831530),
          libwlcsm.so and acsd2.
-         Userspace side: 34 blobs - broadcom.o, private.o, spwenc.o, the
+         Userspace side: 29 blobs - broadcom.o, private.o, spwenc.o, the
          amas_* / roamast / wps_pbcd_be / frs_service / dsl_fb objects,
-         cfg_mnt, networkmap, aaews + mastiff, ahs, bwdpi, libasusnatnl,
-         the eight lighttpd mod_* modules, httpd web_hook.o, priv_webapi.o
-         and hw_auth.o.
+         networkmap, aaews + mastiff, ahs, bwdpi, the eight lighttpd mod_*
+         modules, priv_webapi.o and hw_auth.o.
+ - NOTE: five userspace blobs were deliberately NOT taken from this GPL:
+         cfg_mnt (libcfgmnt.so, cfg_client, cfg_server), httpd web_hook.o and
+         libasusnatnl.so.  102_39274 is an OLDER Asus codebase than the
+         102_39995 level our shared sources sit at, and its cfg_mnt drops the
+         13 SDN/APG multi-LAN symbols that rc/rc.c and cfg_mtlan.h now call
+         (apmx_apgx_to_wlxy, sync_apg_ifnames_to_jffs, get_unused_ifname_by_
+         dut_2, is_sdn_supported_2, ...), while web_hook.o drops
+         aae_account_reg / do_oauth_callback_cgi / check_bwdpi_status_app_name
+         and libasusnatnl.so drops pjsip_tsx_lock_tls_id.  Taking them would
+         break the link, so those five stay where they were.
+         Checked by diffing the exported symbols of all 44 replaced ELF blobs
+         against dav21: nothing else regressed.  The one remaining difference
+         is wl.o no longer exporting wlc_mbss_num_frames_get, which nothing in
+         the tree references and which cannot matter, since wl.ko is linked
+         purely from prebuilt/wl.o.
  - NOTE: the WLAN driver version itself does NOT move - it is still
          17.10.369.39012 (r839077), SDK BB0B.  This is the same driver
          rebuilt for GT-BE98 plus the BSP fixes listed in the GPL's
