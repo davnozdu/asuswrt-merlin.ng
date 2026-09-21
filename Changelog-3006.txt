@@ -12,25 +12,43 @@ Asuswrt-Merlin 3006.xxx Changelog
          Kernel/Wi-Fi side: wl.o, dhd.o, bcm_enet.o, wfd.o, rtl8372.o,
          rdpa.o, bdmf.o, bcm_mpm.o, wlc_types.h (r834507, was r831530),
          libwlcsm.so and acsd2.
-         Userspace side: 29 blobs - broadcom.o, private.o, spwenc.o, the
+         Userspace side: 28 blobs - broadcom.o, private.o, spwenc.o, the
          amas_* / roamast / wps_pbcd_be / frs_service / dsl_fb objects,
          networkmap, aaews + mastiff, ahs, bwdpi, the eight lighttpd mod_*
          modules, priv_webapi.o and hw_auth.o.
- - NOTE: five userspace blobs were deliberately NOT taken from this GPL:
-         cfg_mnt (libcfgmnt.so, cfg_client, cfg_server), httpd web_hook.o and
-         libasusnatnl.so.  102_39274 is an OLDER Asus codebase than the
-         102_39995 level our shared sources sit at, and its cfg_mnt drops the
-         13 SDN/APG multi-LAN symbols that rc/rc.c and cfg_mtlan.h now call
-         (apmx_apgx_to_wlxy, sync_apg_ifnames_to_jffs, get_unused_ifname_by_
-         dut_2, is_sdn_supported_2, ...), while web_hook.o drops
-         aae_account_reg / do_oauth_callback_cgi / check_bwdpi_status_app_name
-         and libasusnatnl.so drops pjsip_tsx_lock_tls_id.  Taking them would
-         break the link, so those five stay where they were.
-         Checked by diffing the exported symbols of all 44 replaced ELF blobs
-         against dav21: nothing else regressed.  The one remaining difference
-         is wl.o no longer exporting wlc_mbss_num_frames_get, which nothing in
-         the tree references and which cannot matter, since wl.ko is linked
-         purely from prebuilt/wl.o.
+ - NOTE: six userspace blobs were deliberately NOT taken from this GPL, each
+         for its own reason.  Build numbers do not imply API compatibility
+         across Asus models: this GPL is 39274, yet the API it lacks arrived
+         in our tree with the OLDER GPL 102_37346, merged from GT-BE98_PRO in
+         0b8a01ed11.  Model branches simply diverge.
+         cfg_mnt (libcfgmnt.so, cfg_client, cfg_server): the 39274 build
+         exposes only the plain SDN/APG multi-LAN entry points, not the 12
+         public _2 ones that cfg_mtlan.h declares and rc/rc.c calls
+         (apmx_apgx_to_wlxy, sync_apg_ifnames_to_jffs, is_sdn_supported_2,
+         get_unused_ifname_by_dut_2, ...).  Keeping our set is also what makes
+         the native amas_apg.o usable: it calls the plain names, and our
+         libcfgmnt.so exports both families.  Signatures of every symbol that
+         actually crosses that boundary are identical in both headers - only
+         the internal _sync_apgx_to_wlunit differs in arity, and nothing
+         imports it.
+         httpd web_hook.o: 39274 drops aae_account_reg,
+         do_oauth_callback_cgi and check_bwdpi_status_app_name, which are
+         reached from live HTTP handlers rather than diagnostics.
+         lighttpd mod_smbdav.so: the 39274 module imports is_valid_filename,
+         which exists only in the GPL's own lighttpd (smb_auth.c:4866) and not
+         in ours, so it would fail to dlopen.  Latent rather than live, since
+         WEBDAV=y appears nowhere in target.mak, but not worth shipping.
+         libasusnatnl.so: the native build needs GLIBCXX_3.4.26 where ours
+         needs at most 3.4.21, and is 634 KB larger - a poor trade on a flash
+         with about 1 MiB free.
+         Verified by diffing GLOBAL/WEAK exports and imports of all 44
+         replaced ELF blobs against dav21.  Every remaining new import
+         resolves: libc, shared.h helpers, json-c, tcode.o, libcfgmnt.so, and
+         for wl.o/dhd.o the four VFS symbols dput / path_put / kern_path /
+         lookup_one_len_unlocked, all EXPORT_SYMBOL in our linux-4.19.  The
+         one unmatched export is wl.o no longer providing
+         wlc_mbss_num_frames_get, which nothing references and which cannot
+         matter, since wl.ko is linked purely from prebuilt/wl.o.
  - NOTE: the WLAN driver version itself does NOT move - it is still
          17.10.369.39012 (r839077), SDK BB0B.  This is the same driver
          rebuilt for GT-BE98 plus the BSP fixes listed in the GPL's
