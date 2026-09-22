@@ -2584,6 +2584,9 @@ struct nvram_tuple router_defaults[] = {
 	{ "ctrld_doh3", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: use DoH3 (HTTP/3) upstream instead of DoH (default on - faster) */
 	{ "ctrld_discovery", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: ctrld LAN discovery (mDNS/ARP/DHCP/PTR probing); default off - dnsmasq fronts all queries, so discovery is pure overhead */
 	{ "ctrld_debug", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: verbose ctrld logging (debug) for diagnostics (default off) */
+	{ "vts_hairpin", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: NAT loopback behind an ISP modem (double NAT / DMZ), 0=off by default */
+	{ "vts_hairpin_mode", "auto", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: public IP source: auto = STUN via getrealip.sh, static = vts_hairpin_ip */
+	{ "vts_hairpin_ip", "", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* GT-BE98: fixed public IP for vts_hairpin_mode=static */
 #ifdef RTCONFIG_DNSPRIVACY
 	{ "dnspriv_enable", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* 0: None 1: DNS-over-TLS */
 	{ "dnspriv_profile", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },	/* 0: Opportunistic 1: Strict */

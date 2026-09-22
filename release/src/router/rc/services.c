@@ -13517,6 +13517,10 @@ start_services(void)
 	 * keeps it up. Brick-safe: boot always completes regardless of ctrld. */
 	if (nvram_get_int("ctrld_enable") == 1)
 		system("(sleep 20; rc rc_service ctrld_check) &");
+
+	/* NAT loopback (vts_hairpin): re-install the public-IP re-probe cron.
+	 * Outside the ctrld path on purpose - runs on default/rog/slim alike. */
+	natloop_cron();
 #endif
 
 	return 0;
@@ -15995,6 +15999,21 @@ apply_spatial_reuse(void)
 	nvram_commit();
 }
 
+/* GT-BE98 NAT loopback behind an ISP modem (vts_hairpin, see
+ * write_natloop_rules in firewall.c). In auto mode the modem's public IP can
+ * change while our private WAN IP stays the same, so no wan_up ever re-runs
+ * getrealip.sh: re-probe it via STUN every 5 minutes. getrealip.sh restarts
+ * the firewall only when the detected address actually changed. A fixed
+ * (static) public IP needs no probing. */
+void
+natloop_cron(void)
+{
+	if (nvram_get_int("vts_hairpin") == 1 && !nvram_match("vts_hairpin_mode", "static"))
+		eval("cru", "a", "natloop", "*/5 * * * * getrealip.sh >/dev/null 2>&1");
+	else
+		eval("cru", "d", "natloop");
+}
+
 /* GT-BE98 Control D (ctrld) DNS forwarder - opt-in user overlay.
  *
  * The arm64 ctrld binary is baked into the read-only rootfs (/usr/sbin/ctrld,
@@ -18417,6 +18436,17 @@ check_ddr_done:
 #if defined(GTBE98)
 	else if (strcmp(script, "spatial_reuse") == 0) {
 		apply_spatial_reuse();
+	}
+	else if (strcmp(script, "natloop") == 0) {
+		/* NAT loopback settings changed in the webui: (un)install the STUN
+		 * re-probe cron and rebuild the firewall so the loopback rule picks
+		 * up the new state / mode / fixed IP at once. In auto mode also kick
+		 * a fresh probe; it restarts the firewall again only if the IP
+		 * changed. */
+		natloop_cron();
+		start_firewall(wan_primary_ifunit(), 0);
+		if (nvram_get_int("vts_hairpin") == 1 && !nvram_match("vts_hairpin_mode", "static"))
+			system("getrealip.sh >/dev/null 2>&1 &");
 	}
 	else if (strcmp(script, "ctrld") == 0) {
 		/* start_ctrld()/stop_ctrld() each bring ctrld up/down AND regenerate

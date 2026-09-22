@@ -3172,6 +3172,41 @@ function get_default_wan_name(){
 				</td>
 			</tr>
 		</table>
+		<!-- GT-BE98: NAT loopback behind an ISP modem (double NAT / DMZ) -->
+		<table id="natloop_section" width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" style="display:none;margin-top:8px;">
+			<thead><tr><td colspan="2">NAT Loopback behind ISP modem (double NAT)</td></tr></thead>
+			<tr>
+				<th width="30%">Enable NAT Loopback</th>
+				<td>
+					<select id="natloop_en_sel" class="input_option" onchange="natloop_mode_change();">
+						<option value="1">Enable</option>
+						<option value="0">Disable</option>
+					</select>
+					<br><span style="color:#FFCC00;font-size:12px;">For a router placed behind an ISP modem/router (e.g. modem DMZ pointing to this router). Port Forwarding then works from the Internet but not from the LAN when you use the public IP or a DDNS name, because the modem does not loop that traffic back. With this on, the router catches LAN connections to the public IP itself and sends them through your Port Forwarding rules. Only active when this router's WAN IP is private; the rule is applied last and never touches other traffic.</span>
+				</td>
+			</tr>
+			<tr id="natloop_mode_tr">
+				<th>Public IP address</th>
+				<td>
+					<select id="natloop_mode_sel" class="input_option" onchange="natloop_mode_change();">
+						<option value="auto">Auto-detect (STUN)</option>
+						<option value="static">Static</option>
+					</select>
+					<span id="natloop_auto_hint" style="color:#888;font-size:12px;">Detected by the router via STUN and re-checked every 5 minutes; rules follow the IP automatically.</span>
+				</td>
+			</tr>
+			<tr id="natloop_ip_tr">
+				<th>Static public IP</th>
+				<td><input type="text" id="natloop_ip_inp" class="input_15_table" maxlength="15" value="" autocorrect="off" autocapitalize="off" placeholder="e.g. 78.102.24.76"> <span style="color:#888;font-size:12px;">Use when your ISP gives you a fixed public IPv4 address.</span></td>
+			</tr>
+			<tr>
+				<th>&nbsp;</th>
+				<td>
+					<input type="button" class="button_gen" onclick="submitNatloop();" value="Apply NAT Loopback">
+					<div id="natloop_status" style="margin-top:4px;font-size:12px;"></div>
+				</td>
+			</tr>
+		</table>
 
 		<div class="apply_gen" style="height:auto">
 			<input class="button_gen" id="apply_btn" onclick="applyRule();" type="button" value="<#CTL_apply#>"/>
@@ -3215,6 +3250,16 @@ function get_default_wan_name(){
 	<input type="hidden" name="ctrld_ttl" value="">
 	<input type="hidden" name="ctrld_doh3" value="">
 	<input type="hidden" name="ctrld_debug" value="">
+</form>
+<!-- GT-BE98 NAT loopback: dedicated apply form (separate from the WAN form) -->
+<form method="post" name="natloop_form" action="/start_apply.htm" target="hidden_frame">
+	<input type="hidden" name="current_page" value="Advanced_WAN_Content.asp">
+	<input type="hidden" name="action_mode" value="apply">
+	<input type="hidden" name="action_script" value="natloop">
+	<input type="hidden" name="action_wait" value="5">
+	<input type="hidden" name="vts_hairpin" value="">
+	<input type="hidden" name="vts_hairpin_mode" value="">
+	<input type="hidden" name="vts_hairpin_ip" value="">
 </form>
 <!-- GT-BE98 Control D: pure restart form (re-runs start_ctrld, saves no settings) -->
 <form method="post" name="ctrld_restart_form" action="/start_apply.htm" target="hidden_frame">
@@ -3272,7 +3317,65 @@ function restartCtrld(){
 	document.ctrld_restart_form.submit();
 	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 8000);
 }
+function natloop_mode_change(){
+	var en = (document.getElementById("natloop_en_sel").value == "1");
+	var st = (document.getElementById("natloop_mode_sel").value == "static");
+	document.getElementById("natloop_mode_tr").style.display = en ? "" : "none";
+	document.getElementById("natloop_ip_tr").style.display = (en && st) ? "" : "none";
+	document.getElementById("natloop_auto_hint").style.display = st ? "none" : "";
+}
+function natloop_is_private(ip){
+	var o = ip.split(".").map(Number);
+	return o[0] == 10 || o[0] == 127 || o[0] == 0 || o[0] >= 224 ||
+		(o[0] == 172 && o[1] >= 16 && o[1] <= 31) ||
+		(o[0] == 192 && o[1] == 168) ||
+		(o[0] == 100 && o[1] >= 64 && o[1] <= 127) ||
+		(o[0] == 169 && o[1] == 254);
+}
+function natloop_init(){
+	if(typeof based_modelid === "undefined" || based_modelid != "GT-BE98") return;
+	var sec = document.getElementById("natloop_section");
+	if(!sec) return;
+	sec.style.display = "";
+	var en = ('<% nvram_get("vts_hairpin"); %>' == "1");
+	document.getElementById("natloop_en_sel").value = en ? "1" : "0";
+	document.getElementById("natloop_mode_sel").value = ('<% nvram_get("vts_hairpin_mode"); %>' == "static") ? "static" : "auto";
+	document.getElementById("natloop_ip_inp").value = '<% nvram_get("vts_hairpin_ip"); %>';
+	natloop_mode_change();
+	var wanip = '<% nvram_get("wan0_ipaddr"); %>';
+	var realip = ('<% nvram_get("wan0_realip_state"); %>' == "2") ? '<% nvram_get("wan0_realip_ip"); %>' : "";
+	var msg = "WAN IP: " + (wanip || "-") + " &nbsp;|&nbsp; Detected public IP: " + (realip || "not detected yet");
+	if(wanip && !natloop_is_private(wanip))
+		msg += "<br>This router already has a public WAN IP - the regular NAT loopback applies, this option has no effect.";
+	msg = (en ? "Status: enabled" : "Status: disabled") + "<br>" + msg;
+	document.getElementById("natloop_status").innerHTML = msg;
+}
+function submitNatloop(){
+	var en = (document.getElementById("natloop_en_sel").value == "1");
+	var mode = document.getElementById("natloop_mode_sel").value;
+	var ip = document.getElementById("natloop_ip_inp").value.replace(/\s/g,'');
+	var m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+	var ok = m && m[1] <= 255 && m[2] <= 255 && m[3] <= 255 && m[4] <= 255;
+	if(ok)
+		ip = [m[1], m[2], m[3], m[4]].map(Number).join(".");
+	if(ok && natloop_is_private(ip))
+		ok = false;
+	if(en && mode == "static" && !ok){
+		alert("Enter a valid public IPv4 address, e.g. 78.102.24.76");
+		document.getElementById("natloop_ip_inp").focus();
+		return;
+	}
+	if(!ok)
+		ip = "";
+	document.natloop_form.vts_hairpin.value = en ? "1" : "0";
+	document.natloop_form.vts_hairpin_mode.value = mode;
+	document.natloop_form.vts_hairpin_ip.value = ip;
+	document.getElementById("natloop_status").innerHTML = "Applying, the firewall is being reloaded...";
+	document.natloop_form.submit();
+	setTimeout(function(){ location.href = "/Advanced_WAN_Content.asp"; }, 7000);
+}
 if(window.addEventListener) window.addEventListener("load", ctrld_init, false);
+if(window.addEventListener) window.addEventListener("load", natloop_init, false);
 </script>
 
 </body>

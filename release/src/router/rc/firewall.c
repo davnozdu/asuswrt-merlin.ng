@@ -1683,6 +1683,55 @@ void write_port_forwarding(FILE *fp, char *config, char *chain, char *lan_ip, ch
 #endif
 }
 
+#if defined(GTBE98)
+/* GT-BE98: NAT loopback behind an ISP modem (double NAT, modem DMZ -> us).
+ * VSERVER is only reached for our private WAN IP, so LAN clients connecting to
+ * the PUBLIC IP are routed to the modem, which often can't loop them back.
+ * Send that traffic to VSERVER here instead; the existing
+ * "-o lan -s lan -d lan -j MASQUERADE" rule completes the loop.
+ * The public IP is either fixed (vts_hairpin_ip) or auto-detected via STUN by
+ * getrealip.sh, which restarts the firewall whenever the address changes.
+ * Written as the very LAST nat PREROUTING rule, and only after strict
+ * validation: a malformed line would make iptables-restore reject the whole
+ * nat table. */
+static void write_natloop_rules(FILE *fp)
+{
+	int unit = wan_primary_ifunit();
+	char prefix[16], pub_ip[INET_ADDRSTRLEN];
+	char *wan_if, *wan_ip, *src;
+	struct in_addr addr;
+
+	if (nvram_get_int("vts_hairpin") != 1)
+		return;
+
+	snprintf(prefix, sizeof(prefix), "wan%d_", unit);
+	wan_if = get_wan_ifname(unit);
+	wan_ip = nvram_pf_safe_get(prefix, "ipaddr");
+	/* only when we sit behind another NAT (private WAN address) */
+	if (!*wan_if || !inet_addr_(wan_ip) || !is_private_subnet(wan_ip))
+		return;
+
+	if (nvram_match("vts_hairpin_mode", "static"))
+		src = nvram_safe_get("vts_hairpin_ip");
+	else if (nvram_pf_get_int(prefix, "realip_state") == 2)
+		src = nvram_pf_safe_get(prefix, "realip_ip");
+	else
+		return;	/* not detected yet - getrealip.sh restarts the firewall once it is */
+
+	if (inet_pton(AF_INET, src, &addr) != 1 ||
+	    addr.s_addr == htonl(INADDR_ANY) || addr.s_addr == htonl(INADDR_NONE))
+		return;
+	inet_ntop(AF_INET, &addr, pub_ip, sizeof(pub_ip));
+	if (is_private_subnet(pub_ip) || !strcmp(pub_ip, wan_ip))
+		return;
+
+#ifdef RTCONFIG_OPEN_NAT
+	fprintf(fp, "-A PREROUTING ! -i %s -d %s -j GAME_VSERVER\n", wan_if, pub_ip);
+#endif
+	fprintf(fp, "-A PREROUTING ! -i %s -d %s -j VSERVER\n", wan_if, pub_ip);
+}
+#endif
+
 void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	// oleg patch
 {
 	FILE *fp;
@@ -2261,6 +2310,9 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 	write_tor_nat_rules6(lan_if);
 #endif
 
+#if defined(GTBE98)
+	write_natloop_rules(fp);
+#endif
 	fprintf(fp, "COMMIT\n");
 	fclose(fp);
 
@@ -2796,6 +2848,9 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 	write_tor_nat_rules6(lan_if);
 #endif
 
+#if defined(GTBE98)
+	write_natloop_rules(fp);
+#endif
 	fprintf(fp, "COMMIT\n");
 	fclose(fp);
 

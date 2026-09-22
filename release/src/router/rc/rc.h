@@ -1237,6 +1237,7 @@ extern void mlo_rescue_war();
 extern void apply_spatial_reuse(void);
 extern void start_ctrld(void);
 extern void stop_ctrld(void);
+extern void natloop_cron(void);
 #endif
 #endif
 #if defined(RTCONFIG_MULTISERVICE_WAN)
