@@ -1,6 +1,34 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav24 (23-Sep-2026)
+ - FIXED: first-time setup hung on the license agreement after a factory
+         reset (reported on dav22/dav23).  Flashing over an existing install
+         was unaffected.
+         Cause: GPL 102_39274 reworked the EULA/privacy-policy handling.  Its
+         spwenc.o gained init_asus_pp_eula(), which normalizes that state on a
+         fresh nvram, and Asus calls it from rc/init.c at the end of
+         init_nvram2().  Our sources predate that function and never call it,
+         so with the 39274 blob in place the policy state was left
+         uninitialized and setup stopped at the agreement step.  On an upgrade
+         nvram already holds an accepted EULA, so the path was never reached -
+         exactly the reported pattern.
+         Fix: shared/prebuild/GT-BE98/spwenc.o and
+         libwebapi/prebuild/GT-BE98/priv_webapi.o return to their dav21
+         versions.  Between them the 39274 builds add exactly six functions -
+         init_asus_pp_eula, safe_do_system, safe_do_system_to_file,
+         safe_fork_do_system, asus_eula_pp_read, update_PP_EULA_ts - and
+         nothing in this firmware, nor in the open parts of the GPL, calls any
+         of them.  The other 31 and 68 exported functions are unchanged:
+         AES/MD5, nvram encryption, password handling, chpass, WireGuard
+         config, the is_* capability probes and the EULA setters all stay.
+ - NOTE: the wireless drivers are NOT affected.  Those are kernel modules
+         built from router-sysdep.gt-be98/hnd_extra/prebuilt/ (wl.o, dhd.o,
+         rtl8372.o, rdpa.o and the rest); the two blobs reverted here are
+         userspace objects linked into libshared.so and libwebapi.so.
+         Everything the GT-BE98 GPL 102_39274 merge brought to the drivers in
+         dav22 is still in place.
+
 3006.102.8_beta4-dav23 (21-Sep-2026)
  - BACKPORT (Merlin 3006.102.9 alpha1 -> beta1, 25 commits, still software
          only - the 102_39995 and 102_39848 blob merges stay skipped, so the
