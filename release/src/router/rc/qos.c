@@ -26,6 +26,9 @@
 #include <sys/types.h>
 #include "rc.h"
 #include <arpa/inet.h>
+#include <sys/ioctl.h>
+#include <linux/sockios.h>
+#include <linux/if_vlan.h>
 #include <sys/socket.h>
 #ifdef RTCONFIG_BWDPI
 #include <bwdpi.h>
@@ -2934,6 +2937,24 @@ int start_cake(void)
 #define QOS_FALLBACK_QPKTS  1364
 #define QOS_TARGET_MS       100
 #define QOS_WRED_TARGET_MS  10
+/* tmctl only knows physical ports: map a VLAN WAN (e.g. vlan4094@eth1) to its
+ * real device; anything else is returned unchanged. */
+static void bcm_tm_phy_ifname(const char *ifname, char *phy, size_t len)
+{
+	struct vlan_ioctl_args ifv;
+	int s;
+
+	strlcpy(phy, ifname, len);
+	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+		return;
+	memset(&ifv, 0, sizeof(ifv));
+	strlcpy(ifv.device1, ifname, sizeof(ifv.device1));
+	ifv.cmd = GET_VLAN_REALDEV_NAME_CMD;
+	if (ioctl(s, SIOCGIFVLAN, &ifv) == 0 && ifv.u.device2[0])
+		strlcpy(phy, ifv.u.device2, len);
+	close(s);
+}
+
 int start_bcm_tm(void)
 {
 	unsigned long obw, ibw, irate = 0, iburst = 0;
@@ -2945,6 +2966,7 @@ int start_bcm_tm(void)
 	char nvname[sizeof("wan0_XXXXXXXX")];
 	const char *wan_ifname;
 	const char *wan_proto;
+	char wan_ifname_tm[IFNAMSIZ];
 
 #if defined(BCM4912)
 	dropalg = 2;
@@ -2972,6 +2994,21 @@ int start_bcm_tm(void)
 		wan_ifname = wan_ifname_phy;
 	}
 #endif
+
+	/* The TM shapes/polices a whole physical port.  A VLAN WAN on a port of its
+	 * own (ISP VLAN tag) is fine once mapped to that port, but on GT-BE98 and
+	 * similar RTL8372 boards the 2.5G WAN is vlan4094 on eth1, the same link
+	 * that carries the LAN switch ports - shaping it would throttle the LAN too. */
+	bcm_tm_phy_ifname(wan_ifname, wan_ifname_tm, sizeof(wan_ifname_tm));
+	if (strcmp(wan_ifname_tm, wan_ifname)) {
+		if (find_in_list(nvram_safe_get("lan_ifnames"), wan_ifname_tm)) {
+			logmessage("qos", "HW AQM not started: WAN %s runs on %s, which also carries LAN ports "
+				"(the Traffic Manager can only shape a whole port). Use a dedicated WAN port - "
+				"on the GT-BE98, the 10G port.", wan_ifname, wan_ifname_tm);
+			return -1;
+		}
+		wan_ifname = wan_ifname_tm;
+	}
 
 	snprintf(nvname, sizeof(nvname), "wan%d_proto", wan_primary_ifunit());
 	wan_proto = nvram_safe_get(nvname);
