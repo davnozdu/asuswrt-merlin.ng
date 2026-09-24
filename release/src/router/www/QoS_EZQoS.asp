@@ -353,6 +353,7 @@ function show_up_down(value){
 		}
 	}
 	else {
+		document.getElementById('hw_aqm_ipolicer_tr').style.display = "none";
 		document.getElementById('upload_tr').style.display = "none";
 		document.getElementById('download_tr').style.display = "none";
 		if(mtwancfg_support){
@@ -551,6 +552,14 @@ function initial(){
 	}
 }
 
+/* HW AQM optional download policer: the download field only matters while it is on */
+function set_ipolicer(on){
+	document.form.qos_ipolicer.value = on ? "1" : "0";
+	document.getElementById('ipolicer_on').checked = !!on;
+	document.getElementById('ipolicer_off').checked = !on;
+	document.getElementById('download_tr').style.display = on ? "" : "none";
+}
+
 /* HW AQM (BCM Traffic Manager) only handles plain Ethernet WAN - rc refuses PPP protos */
 function hw_aqm_proto_support(){
 	var unit = '<% nvram_get("wan_primary"); %>';
@@ -746,11 +755,11 @@ function validForm(){
 				return false;
 			}
 
-			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3) && (document.form.ibw.value.length == 0 || document.form.ibw.value == 0)){		// To check field is 0 && Traditional QoS
+			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || (qos_type == 8 && document.form.qos_ipolicer.value == "1")) && (document.form.ibw.value.length == 0 || document.form.ibw.value == 0)){		// To check field is 0 && Traditional QoS
 				alert("<#QoS_invalid_zero#>");
 				error_ibw++;
 			}
-			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3) && !validator.rangeFloat(document.form.ibw, 0, 9999999999, "")){
+			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || (qos_type == 8 && document.form.qos_ipolicer.value == "1")) && !validator.rangeFloat(document.form.ibw, 0, 9999999999, "")){
 				error_ibw++;
 			}
 
@@ -1058,6 +1067,7 @@ function change_qos_type(value){
 	if(value=="1" && (based_modelid == "RT-AC85U" || based_modelid == "RT-AC85P" || based_modelid == "RT-AC65U")){	//Force change to 0
 		value = 0;
 	}
+	document.getElementById('hw_aqm_ipolicer_tr').style.display = "none";
 	if(value == 0){		//Traditional QoS
 		document.getElementById('int_type').checked = false;
 		document.getElementById('trad_type').checked = true;
@@ -1231,6 +1241,8 @@ function change_qos_type(value){
 			document.getElementById('qos_mpu').style.display = "none";
 			document.getElementById('qos_mpu_label').style.display = "none";
 		}
+		document.getElementById('hw_aqm_ipolicer_tr').style.display = "";
+		set_ipolicer(document.form.qos_ipolicer.value == "1");
 		if(document.form.qos_type_orig.value == 8 && document.form.qos_enable_orig.value != 0){
 			document.form.action_script.value = "restart_qos;restart_firewall";
 		}
@@ -2028,6 +2040,7 @@ function set_overhead(entry) {
 			<input type="hidden" name="qos_enable_orig" value="<% nvram_get("qos_enable"); %>">
 			<input type="hidden" name="qos_type_orig" value="<% nvram_get("qos_type"); %>">
 			<input type="hidden" name="qos_type" value="<% nvram_get("qos_type"); %>">
+			<input type="hidden" name="qos_ipolicer" value="<% nvram_get("qos_ipolicer"); %>">
       <input type="hidden" name="rb_enable" value="<% nvram_get("rb_enable"); %>">
 	  <input type="hidden" name="rb_enable_orig" value="<% nvram_get("rb_enable"); %>"> 
 	<input type="hidden" name="re_rb_enable" value="<% nvram_get("re_rb_enable"); %>">
@@ -2226,6 +2239,14 @@ function set_overhead(entry) {
 													</ul>
 												</div>
 
+											</td>
+										</tr>
+										<tr id="hw_aqm_ipolicer_tr" style="display:none">
+											<th>Download limiter</th>
+											<td colspan="2">
+												<input id="ipolicer_on" name="ipolicer_radio" onClick="set_ipolicer(1);" type="radio" <% nvram_match("qos_ipolicer", "1","checked"); %>><label for="ipolicer_on"><#CTL_Activate#></label>
+												<input id="ipolicer_off" name="ipolicer_radio" onClick="set_ipolicer(0);" type="radio" <% nvram_match("qos_ipolicer", "0","checked"); %>><label for="ipolicer_off"><#CTL_Deactivate#></label>
+												<div style="color:#FC0;margin-top:5px;">Hardware policer on the WAN port: download traffic above 90% of the speed entered below is dropped. Reduces bufferbloat on large downloads, but can add packet loss to calls and games - leave it off unless the download side is the problem. Enter your measured download speed; the 10% headroom is applied automatically.</div>
 											</td>
 										</tr>
 										<tr id="download_tr">

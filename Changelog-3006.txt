@@ -14,6 +14,28 @@ Asuswrt-Merlin 3006.xxx Changelog
          (rc refuses PPPoE/PPTP/L2TP).  Switching to/from HW AQM or Cake no
          longer reboots, unless coming from an enabled Traditional QoS.
          Status: `/tmp/qos stats` over SSH.
+ - NEW: optional download limiter for HW AQM, OFF by default (QoS page ->
+         HW AQM -> Download limiter).  A hardware policer on the WAN port
+         ingress (tmctl setportrxrate, nvram qos_ipolicer), so the flow
+         accelerator stays on.  It drops rather than queues: it tames
+         bufferbloat on big downloads but can add packet loss to calls and
+         games, hence opt-in.  Enter the measured download speed; 10% headroom
+         is applied automatically (at ~100% multi-stream TCP collapses) and the
+         burst is ~100 ms of traffic (64 KB .. 100 MB) - values from AM-Reaper's
+         BCM4916 metal tuning, not yet verified on a GT-BE98.
+ - SECURITY: 37 small, self-contained fixes from the AM-Reaper series
+         (github.com/TheUnboundDeveloper/AM-Reaper), applied as-is with their
+         original authorship, each one only where it applied cleanly: IPsec /
+         NTP / Samba / snmpd / dnsmasq / inadyn / iptables-restore command and
+         config injection, a pre-auth httpd stack overflow and login-decode
+         off-by-one, libpasswd `openssl passwd` injection, DHCP option 125
+         overflow, a stored XSS through LAN client names, avahi mDNS DoS
+         (CVE-2023-38469/38470/38473, CVE-2025-68468/68471), net-snmp NULL
+         varbind (CVE-2022-44792/44793), plus lighttpd, netatalk, quagga and
+         libcodb bounds fixes.  Bug fixes: the stubby (DNS-over-TLS) restart
+         in the watchdog was dead code, DDNS restarted every 30 s when IPv6
+         lived on the other WAN, a duplicate psc6g default, and a benign
+         blog_get_dstentry_by_id syslog flood from the flow accelerator.
 
 3006.102.8_beta4-dav24 (23-Sep-2026)
  - FIXED: first-time setup hung on the license agreement after a factory

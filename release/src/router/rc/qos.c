@@ -2936,7 +2936,7 @@ int start_cake(void)
 #define QOS_WRED_TARGET_MS  10
 int start_bcm_tm(void)
 {
-	unsigned long obw;
+	unsigned long obw, ibw, irate = 0, iburst = 0;
 	FILE *f;
 	unsigned int target_latency, qsize, dropalg;
 	unsigned int wred_qsize;
@@ -2985,6 +2985,24 @@ int start_bcm_tm(void)
 	if (obw == 0)
 		obw = 1024000;
 
+	/* Optional download policer on the WAN port ingress (off by default).
+	 * A policer has no queue: it drops what exceeds the rate instead of
+	 * delaying it, so it can add loss to real-time UDP (calls, games) - hence
+	 * opt-in.  Values tuned on BCM4916 metal by AM-Reaper: at ~100% of the
+	 * line rate multi-stream TCP collapses, so 10% headroom is applied here;
+	 * the bucket holds ~100 ms of traffic (kbit/s * 12.5 = bytes per 100 ms),
+	 * floor 64 KB, cap 100 MB (the rdpa policer CBS maximum). */
+	ibw = strtoul(nvram_safe_get("qos_ibw"), NULL, 10);
+	if (nvram_get_int("qos_ipolicer") == 1 && ibw > 0) {
+		irate = ibw - ibw / 10;
+		iburst = irate * 12 + irate / 2;
+		if (iburst < 65536)
+			iburst = 65536;
+		else if (iburst > 100000000)
+			iburst = 100000000;
+		logmessage("qos", "HW AQM download policer: %lu kbit/s (90%% of %lu), burst %lu bytes", irate, ibw, iburst);
+	}
+
 	snprintf(nvname, sizeof(nvname), "wan%d_mtu", wan_primary_ifunit());
 	packet_size = nvram_get_int(nvname) + 38;	// include L2 overhead
 	if (packet_size - 38 < 576)
@@ -3020,6 +3038,8 @@ int start_bcm_tm(void)
 		"WANIF=%s\n"
 		"OBW=%lu\n"
 		"QSIZE=%d\n"
+		"IRATE=%lu\n"
+		"IBURST=%lu\n"
 		"case \"$1\" in\n"
 		"start)\n"
 		"\tif [ ! -f /tmp/qos_tm_orig_qsize ]; then\n"
@@ -3040,6 +3060,7 @@ int start_bcm_tm(void)
 
 		"\ttmctl %s --devtype 0 --if $WANIF --qid 0 --dropalg %d "
 			"--loredminthr %d --loredmaxthr %d --hiredminthr %d --hiredmaxthr %d --priomask0 0xff --priomask1 0xff\n"
+		"\t[ \"$IRATE\" -gt 0 ] && tmctl setportrxrate --devtype 0 --if $WANIF --shapingrate $IRATE --burstsize $IBURST\n"
 		"\t;;\n\n"
 		"stop)\n"
 		"\tif [ -f /tmp/qos_tm_orig_qsize ]; then\n"
@@ -3049,6 +3070,10 @@ int start_bcm_tm(void)
 		"\t\toriqsize=%d\n"
 		"\tfi\n"
 		"\ttmctl setportshaper --devtype 0 --if $WANIF --shapingrate 0 --minrate 0\n"
+		/* always clear the policer, but skip it when already unset: clearing an
+		 * unset one logs a kernel error (_drv_policer_clear_profile) */
+		"\ttmctl getportrxrate --devtype 0 --if $WANIF 2>/dev/null | grep -q '(0, 0, 0)' || "
+			"tmctl setportrxrate --devtype 0 --if $WANIF --shapingrate 0 --burstsize 0\n"
 		"\ttmctl setqcfg --devtype 0 --if $WANIF --qid 0 --priority 0 --weight 1 --schedmode 1\n"
 		"\ttmctl setqsize --devtype 0 --if $WANIF --qid 0 --qsize \"$oriqsize\"\n"
 		"\ttmctl setqdropalg --devtype 0 --if $WANIF --qid 0 --dropalg 0 "
@@ -3071,6 +3096,7 @@ int start_bcm_tm(void)
 		"\techo \"-------------------------------------------------------------------\"\n"
 		"\ttmctl getporttmparms --devtype 0 --if $WANIF\n"
 		"\ttmctl getportshaper --devtype 0 --if $WANIF\n"
+		"\ttmctl getportrxrate --devtype 0 --if $WANIF\n"
 		"\techo \"--- qid 0 ---\"\n"
 		"\ttmctl getqcfg --devtype 0 --if $WANIF --qid 0\n"
 		"\ttmctl getqdropalg --devtype 0 --if $WANIF --qid 0\n"
@@ -3081,6 +3107,8 @@ int start_bcm_tm(void)
 		wan_ifname,
 		obw,
 		qsize,
+		irate,
+		iburst,
 		(dropalg == 4 ? "setqdropalg" : "setqdropalgx"), dropalg,
 		wred_lo, wred_hi, wred_lo, wred_hi,
 		QOS_FALLBACK_QPKTS);
