@@ -363,6 +363,14 @@ end:
 	QOSLOG("is_ip=%d, is_mac=%d, is_range=%d, type=%d, new=%s", is_ip, is_mac, is_range, *type, new);
 }
 
+/* HW QoS Classful: the class number (1 = highest .. 5 = lowest) is also the
+ * hardware egress queue, and the BCM TM serves a higher qid first, so invert
+ * it there (1..5 -> 5..1).  6 (LAN/multicast) is left alone. */
+static int hwq_class(int class_num)
+{
+	return (IS_HWQOS_CLASSFUL() && class_num >= 1 && class_num <= 5) ? 6 - class_num : class_num;
+}
+
 static unsigned calc(unsigned bw, unsigned pct)
 {
 	unsigned n = ((unsigned long)bw * pct) / 100;
@@ -636,6 +644,9 @@ static int add_qos_rules(char *pcWANIF)
 		}
 		else{
 			// for LAN-to-LAN
+			// (no prefix yet: "-s /64" would make ip6tables-restore reject
+			// the whole file and leave IPv6 unclassified)
+			if (*ipv6_prefix) {
 			fprintf(fn_ipv6,
 				"-A QOSO -s %s/%s -d %s/%s -j CONNMARK %s 0x%x/0x%x\n",
 					ipv6_prefix, ipv6_prefix_length, ipv6_prefix, ipv6_prefix_length, action, lan_class_num|class_gum, class_mask|class_gum
@@ -645,6 +656,7 @@ static int add_qos_rules(char *pcWANIF)
 					"-A QOSO -s %s/%s -d %s/%s -j RETURN\n",
 						ipv6_prefix, ipv6_prefix_length, ipv6_prefix, ipv6_prefix_length
 					);
+			}
 			// for multicast
 			fprintf(fn_ipv6,
 				"-A QOSO -d ff00::/8 -j CONNMARK %s 0x%x/0x%x\n",
@@ -676,6 +688,23 @@ static int add_qos_rules(char *pcWANIF)
 		class_num = safe_atoi(prio);
 		if ((class_num < 0) || (class_num > 4)) continue;
 
+		/* the port goes verbatim into "-m multiport --dport %s" of an
+		 * iptables-restore file: allow the multiport grammar only
+		 * (from AM-Reaper) */
+		if (*port && strspn(port, "0123456789,:-") != strlen(port)) {
+			QOSLOG("[qos] port \"%s\" has illegal chars, skipping rule", port);
+			continue;
+		}
+
+		/* HW QoS Classful: the accelerator fixes a flow's queue when the flow
+		 * is learned, so a later re-mark by transferred bytes never reaches
+		 * the hardware - such a rule would pin a big transfer in its first
+		 * class.  Skip it; the connection falls through to the other rules. */
+		if (IS_HWQOS_CLASSFUL() && *transferred) {
+			logmessage("qos", "HW QoS Classful: rule \"%s\" uses transferred bytes, which the flow accelerator cannot follow - skipped", desc);
+			continue;
+		}
+
 		i = 1 << class_num;
 		++class_num;
 
@@ -699,7 +728,7 @@ static int add_qos_rules(char *pcWANIF)
 		int rule_gum = (strcmp(transferred,"") == 0) ? class_gum : 0;
 
 		chain = "QOSO";		// chain name
-		snprintf(end , sizeof(end), " -j CONNMARK %s 0x%x/0x%x\n", action, class_num|rule_gum, class_mask|rule_gum);	// CONNMARK string
+		snprintf(end , sizeof(end), " -j CONNMARK %s 0x%x/0x%x\n", action, hwq_class(class_num)|rule_gum, class_mask|rule_gum);	// CONNMARK string
 		snprintf(end2, sizeof(end2), " -j RETURN\n");
 
 		/*************************************************/
@@ -902,8 +931,10 @@ static int add_qos_rules(char *pcWANIF)
 	class_num = i + 1;
 
 #ifdef CONFIG_BCMWL5 // TODO: it is only for the case, eth0 as wan, vlanx as lan
-	if(strncmp(pcWANIF, "ppp", 3)==0){
+	if(strncmp(pcWANIF, "ppp", 3)==0 || IS_HWQOS_CLASSFUL()){
 		// ppp related interface doesn't need physdev
+		// HW QoS Classful shapes upload only: marking LAN-bound traffic
+		// would just steer it into LAN port queues
 		// do nothing
 	}
 	else{
@@ -918,15 +949,16 @@ static int add_qos_rules(char *pcWANIF)
 		fprintf(fn,
 			"-A QOSO -j CONNMARK %s 0x%x/0x%x\n"
 			"-A POSTROUTING -o %s -j QOSO\n",
-				action, class_num|class_gum, class_mask|class_gum,
+				action, hwq_class(class_num)|class_gum, class_mask|class_gum,
 				pcWANIF
 			);
 
 #ifdef RTCONFIG_IPV6
 	if (fn_ipv6 && ipv6_enabled() && *wan6face) {
 #ifdef CONFIG_BCMWL5 // TODO: it is only for the case, eth0 as wan, vlanx as lan
-		if(strncmp(wan6face, "ppp", 3)==0){
+		if(strncmp(wan6face, "ppp", 3)==0 || IS_HWQOS_CLASSFUL()){
 			// ppp related interface doesn't need physdev
+			// HW QoS Classful: upload only, see above
 			// do nothing
 		}
 		else{
@@ -941,7 +973,7 @@ static int add_qos_rules(char *pcWANIF)
 		fprintf(fn_ipv6,
 			"-A QOSO -j CONNMARK %s 0x%x/0x%x\n"
 			"-A POSTROUTING -o %s -j QOSO\n",
-				action, class_num|class_gum, class_mask|class_gum,
+				action, hwq_class(class_num)|class_gum, class_mask|class_gum,
 				wan6face
 			);
 	}
@@ -957,7 +989,9 @@ static int add_qos_rules(char *pcWANIF)
 	for (i = 0; i < 10; ++i) {
 		if ((!g) || ((p = strsep(&g, ",")) == NULL)) continue;
 		if ((inuse & (1 << i)) == 0) continue;
-		if (safe_atoi(p) > 0) {
+		/* the ingress restore only feeds the T.QoS download qdisc; under HW
+		 * QoS Classful it would steer download flows into LAN port queues */
+		if (safe_atoi(p) > 0 && !IS_HWQOS_CLASSFUL()) {
 			fprintf(fn, "-A PREROUTING -i %s -j CONNMARK --restore-mark --mask 0x%x\n", pcWANIF, class_mask);
 #ifdef CLS_ACT
 			fprintf(fn, "-A PREROUTING -i %s -j IMQ --todev 0\n", pcWANIF);
@@ -2672,6 +2706,10 @@ static int start_rog_qos()
 }
 
 
+#if defined(HND_ROUTER) && (defined(BCM4912) || defined(RTCONFIG_HND_ROUTER_BE_4916))
+static int bcm_tm_wan_port(char *out, size_t len, int verbose);
+#endif
+
 int add_iQosRules(char *pcWANIF)
 {
 	int status = 0;
@@ -2689,7 +2727,24 @@ int add_iQosRules(char *pcWANIF)
 
 	if (pcWANIF == NULL || nvram_get_int("qos_type") == 1 || nvram_get_int("qos_type") == 8) return -1;
 
-	if (IS_TQOS()) {
+	if (IS_HWQOS_CLASSFUL()) {
+		/* start_bcm_tm() refuses to run without an upload rate or a usable
+		 * WAN port: do not leave class marks behind with nothing using them
+		 * (on a port shared with the LAN they would even pick LAN queues) */
+#if defined(HND_ROUTER) && (defined(BCM4912) || defined(RTCONFIG_HND_ROUTER_BE_4916))
+		char port[IFNAMSIZ];
+
+		if (strtoul(nvram_safe_get("qos_obw"), NULL, 10) == 0 ||
+		    bcm_tm_wan_port(port, sizeof(port), 0) < 0) {
+#else
+		{	/* no BCM Traffic Manager on this platform */
+#endif
+			del_iQosRules();
+			return -1;
+		}
+	}
+
+	if (IS_TQOS() || IS_HWQOS_CLASSFUL()) {
 		status = add_qos_rules(pcWANIF);
 	}
 	else if (IS_BW_QOS()) {
@@ -2750,7 +2805,7 @@ int start_iQos(void)
 		status = start_cake();
 	}
 #if defined(BCM4912) || defined(RTCONFIG_HND_ROUTER_BE_4916)
-	else if (IS_BCMTM_QOS()) {
+	else if (IS_BCMTM_QOS() || IS_HWQOS_CLASSFUL()) {
 		status = start_bcm_tm();
 	}
 #endif
@@ -2955,27 +3010,22 @@ static void bcm_tm_phy_ifname(const char *ifname, char *phy, size_t len)
 	close(s);
 }
 
-int start_bcm_tm(void)
+/* The physical WAN port the Traffic Manager can shape, or -1 when there is
+ * none: an unsupported WAN protocol, or a WAN sharing its port with the LAN.
+ * Used by start_bcm_tm() and, for HW QoS Classful, before any marking. */
+static int bcm_tm_wan_port(char *out, size_t len, int verbose)
 {
-	unsigned long obw, ibw, irate = 0, iburst = 0;
-	FILE *f;
-	unsigned int target_latency, qsize, dropalg;
-	unsigned int wred_qsize;
-	int packet_size;
-	int wred_lo = 0, wred_hi = 0;
 	char nvname[sizeof("wan0_XXXXXXXX")];
-	const char *wan_ifname;
-	const char *wan_proto;
-	char wan_ifname_tm[IFNAMSIZ];
+	const char *wan_ifname, *wan_proto;
+	const char *mode = IS_HWQOS_CLASSFUL() ? "HW QoS Classful" : "HW AQM";
 
-#if defined(BCM4912)
-	dropalg = 2;
-#elif defined(BCM6765) || defined(BCM6764)
-	logmessage("qos", "%s: Model not supported", __FUNCTION__);
-	return -1; // Archer Unsupported
-#elif defined(RTCONFIG_HND_ROUTER_BE_4916)
-	dropalg = 4;
-#endif
+	snprintf(nvname, sizeof(nvname), "wan%d_proto", wan_primary_ifunit());
+	wan_proto = nvram_safe_get(nvname);
+	if (strcmp(wan_proto, "dhcp") && strcmp(wan_proto, "static") && strcmp(wan_proto, "bridge")) {
+		if (verbose)
+			logmessage("qos", "WAN protocol %s is not supported by %s", wan_proto, mode);
+		return -1;
+	}
 
 	wan_ifname = get_wanx_ifname(wan_primary_ifunit());
 
@@ -2999,28 +3049,82 @@ int start_bcm_tm(void)
 	 * own (ISP VLAN tag) is fine once mapped to that port, but on GT-BE98 and
 	 * similar RTL8372 boards the 2.5G WAN is vlan4094 on eth1, the same link
 	 * that carries the LAN switch ports - shaping it would throttle the LAN too. */
-	bcm_tm_phy_ifname(wan_ifname, wan_ifname_tm, sizeof(wan_ifname_tm));
-	if (strcmp(wan_ifname_tm, wan_ifname)) {
-		if (find_in_list(nvram_safe_get("lan_ifnames"), wan_ifname_tm)) {
-			logmessage("qos", "HW AQM not started: WAN %s runs on %s, which also carries LAN ports "
+	bcm_tm_phy_ifname(wan_ifname, out, len);
+	if (strcmp(out, wan_ifname) && find_in_list(nvram_safe_get("lan_ifnames"), out)) {
+		if (verbose)
+			logmessage("qos", "%s not started: WAN %s runs on %s, which also carries LAN ports "
 				"(the Traffic Manager can only shape a whole port). Use a dedicated WAN port - "
-				"on the GT-BE98, the 10G port.", wan_ifname, wan_ifname_tm);
-			return -1;
-		}
-		wan_ifname = wan_ifname_tm;
-	}
-
-	snprintf(nvname, sizeof(nvname), "wan%d_proto", wan_primary_ifunit());
-	wan_proto = nvram_safe_get(nvname);
-	if (strcmp(wan_proto, "dhcp") && strcmp(wan_proto, "static") && strcmp(wan_proto, "bridge")) {
-		logmessage("qos", "WAN protocol %s is not supported by HW AQM", wan_proto);
+				"on the GT-BE98, the 10G port.", mode, wan_ifname, out);
 		return -1;
 	}
 
+	return 0;
+}
+
+int start_bcm_tm(void)
+{
+	unsigned long obw, ibw, irate = 0, iburst = 0;
+	FILE *f;
+	unsigned int target_latency, qsize, dropalg;
+	unsigned int wred_qsize;
+	int packet_size;
+	int wred_lo = 0, wred_hi = 0;
+	char nvname[sizeof("wan0_XXXXXXXX")];
+	const char *wan_ifname;
+	char wan_ifname_tm[IFNAMSIZ];
+	const char *dropcmd;
+	int classful = IS_HWQOS_CLASSFUL();
+	unsigned int qcap[7] = { 0 };	/* per-qid ceiling (kbit/s), classful only; 0 = no queue cap */
+	int prio, q;
+
+#if defined(BCM4912)
+	dropalg = 2;
+#elif defined(BCM6765) || defined(BCM6764)
+	logmessage("qos", "%s: Model not supported", __FUNCTION__);
+	return -1; // Archer Unsupported
+#elif defined(RTCONFIG_HND_ROUTER_BE_4916)
+	dropalg = 4;
+#endif
+
+	if (bcm_tm_wan_port(wan_ifname_tm, sizeof(wan_ifname_tm), 1) < 0)
+		return -1;
+	wan_ifname = wan_ifname_tm;
+
 	obw = strtoul(nvram_safe_get("qos_obw"), NULL, 10);
 
-	if (obw == 0)
+	if (obw == 0) {
+		if (classful) {
+			logmessage("qos", "HW QoS Classful not started: no upload bandwidth set");
+			return -1;
+		}
 		obw = 1024000;
+	}
+
+	/* HW QoS Classful: add_qos_rules() leaves the class in skb->mark bits [2:0]
+	 * (inverted, see hwq_class()), and the flow accelerator copies those bits
+	 * into the hardware flow as its egress queue - so accelerated flows land in
+	 * a per-class queue with the accelerator still on (verified on GT-BE98
+	 * metal: a marked upload ran 124 MB in hardware, 2 packets through the
+	 * CPU, all of it in the marked queue).  The TM serves a higher qid first,
+	 * so priority 0 (highest) uses qid 5 and priority 4 uses qid 1; qid 0
+	 * (unmarked) is the lowest and qid 6 (LAN/multicast class) sits above
+	 * them.  Each class queue gets PI2 AQM and the class ceiling from
+	 * qos_orates ("min-max" % per priority) as a queue shaper; the port shaper
+	 * caps the total.  The "min" half is not used: this TM accepts --minrate
+	 * but does not keep it (read back as 0 on metal). */
+	if (classful) {
+		char *buf, *g, *pp;
+		unsigned int rmin, rmax;
+
+		g = buf = strdup(nvram_safe_get("qos_orates"));
+		for (prio = 0; prio < 5 && g; prio++) {
+			if ((pp = strsep(&g, ",")) == NULL)
+				break;
+			if (sscanf(pp, "%u-%u", &rmin, &rmax) == 2 && rmax >= 1 && rmax < 100)
+				qcap[5 - prio] = calc(obw, rmax);
+		}
+		free(buf);
+	}
 
 	/* Optional download policer on the WAN port ingress (off by default).
 	 * A policer has no queue: it drops what exceeds the rate instead of
@@ -3069,6 +3173,8 @@ int start_bcm_tm(void)
 
 	if((f = fopen(qosfn, "w")) == NULL) return -2;
 
+	dropcmd = (dropalg == 4 ? "setqdropalg" : "setqdropalgx");
+
 	/* Stop/start rules */
 	fprintf(f,
 		"#!/bin/sh\n"
@@ -3096,7 +3202,43 @@ int start_bcm_tm(void)
 		"\ttmctl setqsize --devtype 0 --if $WANIF --qid 0 --qsize $QSIZE\n"
 
 		"\ttmctl %s --devtype 0 --if $WANIF --qid 0 --dropalg %d "
-			"--loredminthr %d --loredmaxthr %d --hiredminthr %d --hiredmaxthr %d --priomask0 0xff --priomask1 0xff\n"
+			"--loredminthr %d --loredmaxthr %d --hiredminthr %d --hiredmaxthr %d --priomask0 0xff --priomask1 0xff\n",
+		wan_ifname,
+		obw,
+		qsize,
+		irate,
+		iburst,
+		dropcmd, dropalg,
+		wred_lo, wred_hi, wred_lo, wred_hi);
+
+	if (classful) {
+		/* Only a strict-priority layout in qid order (the stock layout of a
+		 * dedicated WAN port) ranks the classes; otherwise say so - the caps
+		 * and AQM still apply, the ordering does not. */
+		fprintf(f,
+			"\tbad=\n"
+			"\tfor q in 1 2 3 4 5 6; do\n"
+			"\t\tp=$(tmctl getqcfg --devtype 0 --if $WANIF --qid $q 2>/dev/null | "
+			"sed -n 's/.*priority *: *\\(-*[0-9]*\\).*/\\1/p')\n"
+			"\t\t[ \"$p\" = \"$q\" ] || bad=1\n"
+			"\t\tif [ ! -f /tmp/qos_tm_orig_qsize.$q ]; then\n"
+			"\t\t\torig=$(tmctl getqcfg --devtype 0 --if $WANIF --qid $q 2>/dev/null | "
+			"sed -n 's/.*qsize *: *\\([0-9]*\\).*/\\1/p')\n"
+			"\t\t\tcase \"$orig\" in ''|*[!0-9]*) orig=;; esac\n"
+			"\t\t\t[ -n \"$orig\" ] && echo \"$orig\" > /tmp/qos_tm_orig_qsize.$q\n"
+			"\t\tfi\n"
+			"\t\ttmctl setqsize --devtype 0 --if $WANIF --qid $q --qsize $QSIZE\n"
+			"\t\ttmctl %s --devtype 0 --if $WANIF --qid $q --dropalg %d "
+				"--loredminthr %d --loredmaxthr %d --hiredminthr %d --hiredmaxthr %d --priomask0 0xff --priomask1 0xff\n"
+			"\tdone\n"
+			"\t[ -n \"$bad\" ] && logger -t qos \"HW QoS Classful: queues on $WANIF are not in strict-priority order - classes are capped but not prioritized\"\n",
+			dropcmd, dropalg,
+			wred_lo, wred_hi, wred_lo, wred_hi);
+		for (q = 1; q <= 5; q++)
+			fprintf(f, "\ttmctl setqshaper --devtype 0 --if $WANIF --qid %d --shapingrate %u\n", q, qcap[q]);
+	}
+
+	fprintf(f,
 		"\t[ \"$IRATE\" -gt 0 ] && tmctl setportrxrate --devtype 0 --if $WANIF --shapingrate $IRATE --burstsize $IBURST\n"
 		"\t;;\n\n"
 		"stop)\n"
@@ -3109,12 +3251,21 @@ int start_bcm_tm(void)
 		"\ttmctl setportshaper --devtype 0 --if $WANIF --shapingrate 0 --minrate 0\n"
 		/* always clear the policer, but skip it when already unset: clearing an
 		 * unset one logs a kernel error (_drv_policer_clear_profile) */
-		"\ttmctl getportrxrate --devtype 0 --if $WANIF 2>/dev/null | grep -q '(0, 0, 0)' || "
+		"\ttmctl getportrxrate --devtype 0 --if $WANIF 2>/dev/null | grep -q 'shaper *: *(0,' || "
 			"tmctl setportrxrate --devtype 0 --if $WANIF --shapingrate 0 --burstsize 0\n"
 		"\ttmctl setqcfg --devtype 0 --if $WANIF --qid 0 --priority 0 --weight 1 --schedmode 1\n"
 		"\ttmctl setqsize --devtype 0 --if $WANIF --qid 0 --qsize \"$oriqsize\"\n"
 		"\ttmctl setqdropalg --devtype 0 --if $WANIF --qid 0 --dropalg 0 "
 			"--loredminthr 0 --loredmaxthr 0 --hiredminthr 0 --hiredmaxthr 0 --priomask0 0xff --priomask1 0xff\n"
+		/* class queues (HW QoS Classful); only the ones start saved */
+		"\tfor q in 1 2 3 4 5 6; do\n"
+		"\t\t[ -f /tmp/qos_tm_orig_qsize.$q ] || continue\n"
+		"\t\ttmctl setqshaper --devtype 0 --if $WANIF --qid $q --shapingrate 0\n"
+		"\t\ttmctl setqdropalg --devtype 0 --if $WANIF --qid $q --dropalg 0 "
+			"--loredminthr 0 --loredmaxthr 0 --hiredminthr 0 --hiredmaxthr 0 --priomask0 0xff --priomask1 0xff\n"
+		"\t\ttmctl setqsize --devtype 0 --if $WANIF --qid $q --qsize \"$(cat /tmp/qos_tm_orig_qsize.$q)\"\n"
+		"\t\trm -f /tmp/qos_tm_orig_qsize.$q\n"
+		"\tdone\n"
 		"\tif [ -f /tmp/qos_tm_orig_stop_tmctl_qos ]; then\n"
 		"\t\torig_stop_tmctl_qos=$(cat /tmp/qos_tm_orig_stop_tmctl_qos)\n"
 		"\t\trm -f /tmp/qos_tm_orig_stop_tmctl_qos\n"
@@ -3134,20 +3285,16 @@ int start_bcm_tm(void)
 		"\ttmctl getporttmparms --devtype 0 --if $WANIF\n"
 		"\ttmctl getportshaper --devtype 0 --if $WANIF\n"
 		"\ttmctl getportrxrate --devtype 0 --if $WANIF\n"
-		"\techo \"--- qid 0 ---\"\n"
-		"\ttmctl getqcfg --devtype 0 --if $WANIF --qid 0\n"
-		"\ttmctl getqdropalg --devtype 0 --if $WANIF --qid 0\n"
-		"\ttmctl getqstats --devtype 0 --if $WANIF --qid 0\n"
+		"\tfor q in 0 1 2 3 4 5 6; do\n"
+		"\t\t[ $q -eq 0 ] || [ -f /tmp/qos_tm_orig_qsize.$q ] || continue\n"
+		"\t\techo \"--- qid $q ---\"\n"
+		"\t\ttmctl getqcfg --devtype 0 --if $WANIF --qid $q\n"
+		"\t\ttmctl getqdropalg --devtype 0 --if $WANIF --qid $q\n"
+		"\t\ttmctl getqstats --devtype 0 --if $WANIF --qid $q\n"
+		"\tdone\n"
 		"\t;;\n"
 		"*)\n"
 		"esac\n",
-		wan_ifname,
-		obw,
-		qsize,
-		irate,
-		iburst,
-		(dropalg == 4 ? "setqdropalg" : "setqdropalgx"), dropalg,
-		wred_lo, wred_hi, wred_lo, wred_hi,
 		QOS_FALLBACK_QPKTS);
 
 	fclose(f);

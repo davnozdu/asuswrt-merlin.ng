@@ -470,7 +470,7 @@ function initial(){
 	if(adaptiveqos_support){
 		document.getElementById('content_title').innerHTML = "<#menu5_3_2#> - <#Adaptive_QoS_Conf#>";
 		if(document.form.qos_enable.value == "1"){
-			if(qos_type == 0){              //Traditional Type
+			if(qos_type == 0 || qos_type == 11){              //Traditional Type / HW QoS Classful
 				add_option(document.getElementById("settingSelection"), '<#qos_user_rules#>', 3, 0);
 				add_option(document.getElementById("settingSelection"), '<#qos_user_prio#>', 4, 0);
 			}
@@ -478,7 +478,7 @@ function initial(){
 				document.getElementById('settingSelection').style.display = "none";
 			}
 
-			if((cake_support && (qos_type == 9)) || (codel_support && (qos_type != 1) && (qos_type != 8))){
+			if((cake_support && (qos_type == 9)) || (codel_support && (qos_type != 1) && (qos_type != 8) && (qos_type != 11))){
 				document.getElementById('qos_overhead_tr').style.display = "";
 			}
 			if((cake_support) && (qos_type == 9)){
@@ -491,7 +491,7 @@ function initial(){
 		}
 	}
 	else{
-		if(qos_type == 0){		//Traditional Type
+		if(qos_type == 0 || qos_type == 11){		//Traditional Type / HW QoS Classful
 			add_option(document.getElementById("settingSelection"), '<#qos_user_rules#>', 3, 0);
 			add_option(document.getElementById("settingSelection"), '<#qos_user_prio#>', 4, 0);
 		}
@@ -547,8 +547,11 @@ function initial(){
 	if(hw_aqm_support && hw_aqm_proto_support()){
 		document.getElementById('hw_aqm_type').style.display = "";
 		document.querySelector('label[for="hw_aqm_type"]').style.display = "";
+		document.getElementById('hwqos_classful_type').style.display = "";
+		document.querySelector('label[for="hwqos_classful_type"]').style.display = "";
 	} else {
 		$('#hw_aqm_desc').hide();
+		$('#hwqos_classful_desc').hide();
 	}
 }
 
@@ -719,12 +722,12 @@ function validForm(){
 
 		if(qos_type != 2){	//not Bandwidth Limiter
 
-			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || qos_type == 8) && (document.form.obw.value.length == 0 || document.form.obw.value == 0)){		// To check field is 0 && Traditional QoS
+			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || qos_type == 8 || qos_type == 11) && (document.form.obw.value.length == 0 || document.form.obw.value == 0)){		// To check field is 0 && Traditional QoS
 				alert("<#QoS_invalid_zero#>");
 				error_obw++;
 
 			}
-			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || qos_type == 8) && !validator.rangeFloat(document.form.obw, 0, 9999999999, "")){
+			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || qos_type == 8 || qos_type == 11) && !validator.rangeFloat(document.form.obw, 0, 9999999999, "")){
 				error_obw++;
 			}
 
@@ -755,11 +758,11 @@ function validForm(){
 				return false;
 			}
 
-			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || (qos_type == 8 && document.form.qos_ipolicer.value == "1")) && (document.form.ibw.value.length == 0 || document.form.ibw.value == 0)){		// To check field is 0 && Traditional QoS
+			if( ((qos_type == 1 && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || ((qos_type == 8 || qos_type == 11) && document.form.qos_ipolicer.value == "1")) && (document.form.ibw.value.length == 0 || document.form.ibw.value == 0)){		// To check field is 0 && Traditional QoS
 				alert("<#QoS_invalid_zero#>");
 				error_ibw++;
 			}
-			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || (qos_type == 8 && document.form.qos_ipolicer.value == "1")) && !validator.rangeFloat(document.form.ibw, 0, 9999999999, "")){
+			else if( (((qos_type == 1 || qos_type == 9) && document.form.bw_setting_name[1].checked == true ) || qos_type == 0 || qos_type == 3 || ((qos_type == 8 || qos_type == 11) && document.form.qos_ipolicer.value == "1")) && !validator.rangeFloat(document.form.ibw, 0, 9999999999, "")){
 				error_ibw++;
 			}
 
@@ -940,8 +943,8 @@ function determineActionScript(){
         }
     document.form.action_wait.value = "15";
 	}
-	else if((document.form.qos_type.value == "8" || document.form.qos_type.value == "9" ||
-		 document.form.qos_type_orig.value == "8" || document.form.qos_type_orig.value == "9") &&
+	else if((document.form.qos_type.value == "8" || document.form.qos_type.value == "9" || document.form.qos_type.value == "11" ||
+		 document.form.qos_type_orig.value == "8" || document.form.qos_type_orig.value == "9" || document.form.qos_type_orig.value == "11") &&
 		!(document.form.qos_type_orig.value == "0" && document.form.qos_enable_orig.value == "1")){
 		//Enabling/disabling Cake or HW AQM does not need a reboot, unless switching from an enabled Traditional QoS
 		if(router_boost_support) {
@@ -1068,6 +1071,7 @@ function change_qos_type(value){
 		value = 0;
 	}
 	document.getElementById('hw_aqm_ipolicer_tr').style.display = "none";
+	document.getElementById('hwqos_classful_type').checked = false;
 	if(value == 0){		//Traditional QoS
 		document.getElementById('int_type').checked = false;
 		document.getElementById('trad_type').checked = true;
@@ -1244,6 +1248,41 @@ function change_qos_type(value){
 		document.getElementById('hw_aqm_ipolicer_tr').style.display = "";
 		set_ipolicer(document.form.qos_ipolicer.value == "1");
 		if(document.form.qos_type_orig.value == 8 && document.form.qos_enable_orig.value != 0){
+			document.form.action_script.value = "restart_qos;restart_firewall";
+		}
+		else{
+			document.form.action_script.value = "reboot";
+			document.form.next_page.value = "QoS_EZQoS.asp";
+			document.form.action_wait.value = "<% get_default_reboot_time(); %>";
+		}
+		show_settings("NonAdaptive");
+	}
+	else if(value == 11){		//HW QoS Classful (T.QoS classes in BCM TM queues, upload only)
+		document.getElementById('int_type').checked = false;
+		document.getElementById('trad_type').checked = false;
+		document.getElementById('bw_limit_type').checked = false;
+		document.getElementById('cake_type').checked = false;
+		document.getElementById('hw_aqm_type').checked = false;
+		document.getElementById('hwqos_classful_type').checked = true;
+		if(geforceNow_support)
+			document.getElementById('GeForce_type').checked = false;
+		document.getElementById('bandwidth_setting_tr').style.display = "none";
+		document.getElementById('list_table').style.display = "none";
+		show_up_down(1);
+		document.getElementById('download_tr').style.display = "none";
+		document.getElementById('wan_2_tr').style.display = "none";
+		document.getElementById('upload2_tr').style.display = "none";
+		document.getElementById('download2_tr').style.display = "none";
+		if (codel_support || cake_support) {
+			document.getElementById('qos_overhead_tr').style.display = "none";
+		}
+		if (cake_support) {
+			document.getElementById('qos_mpu').style.display = "none";
+			document.getElementById('qos_mpu_label').style.display = "none";
+		}
+		document.getElementById('hw_aqm_ipolicer_tr').style.display = "";
+		set_ipolicer(document.form.qos_ipolicer.value == "1");
+		if(document.form.qos_type_orig.value == 11 && document.form.qos_enable_orig.value != 0){
 			document.form.action_script.value = "restart_qos;restart_firewall";
 		}
 		else{
@@ -2100,6 +2139,7 @@ function set_overhead(entry) {
 															<li><#EzQoS_desc_Bandwidth_Limiter#></li>
 															<li id="cake_desc"><span style="font-weight:bolder;font-size:14px;">Cake</span> is an automatic queue management algorithm that takes care of ensuring fairness in traffic queueing without requiring manual configuration.</li>
 															<li id="hw_aqm_desc"><span style="font-weight:bolder;font-size:14px;">HW AQM</span> is a hardware-accelerated Active Queue Management that shapes the upload queue in the network processor to reduce bufferbloat, while keeping the flow accelerator enabled.</li>
+															<li id="hwqos_classful_desc"><span style="font-weight:bolder;font-size:14px;">HW QoS Classful</span> puts the Traditional QoS classes into hardware upload queues: higher-priority classes are sent first, each with PI2 AQM and its maximum rate as a cap, and the flow accelerator stays enabled. Classes are set in the user-defined QoS rules and priority pages; only the maximum rate of a priority applies, and rules based on transferred bytes are ignored (the accelerator fixes a connection's class when it starts).</li>
 										     </ul>
 														<#EzQoS_desc_note#>
 													</div>
@@ -2196,6 +2236,7 @@ function set_overhead(entry) {
 											  <span id="GeForceNow_item" style="display: none;"><input id="GeForce_type" name="qos_type_radio" value="3" onClick="change_qos_type(this.value);" type="radio" <% nvram_match("qos_type", "3","checked"); %>><a class="hintstyle" href="javascript:void(0);"><label for="GeForce_type">GeForce NOW QoS</label></a></span>
 												<input id="cake_type" name="qos_type_radio" value="9" onClick="change_qos_type(this.value);" style="display:none;" type="radio" <% nvram_match("qos_type", "9","checked"); %>><a id="cake_type_link" style="display:none;" class="hintstyle" href="javascript:void(0);" onClick="openHint(50, 32);"><label for="cake_type">Cake</label></a>
 												<input id="hw_aqm_type" name="qos_type_radio" value="8" onClick="change_qos_type(this.value);" style="display:none;" type="radio" <% nvram_match("qos_type", "8","checked"); %>><label for="hw_aqm_type" style="display:none;">HW AQM</label>
+												<input id="hwqos_classful_type" name="qos_type_radio" value="11" onClick="change_qos_type(this.value);" style="display:none;" type="radio" <% nvram_match("qos_type", "11","checked"); %>><label for="hwqos_classful_type" style="display:none;">HW QoS Classful</label>
 										  </td>
 										</tr>
 										<tr id="qos_overhead_tr" style="display:none">

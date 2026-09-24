@@ -23,6 +23,30 @@ Asuswrt-Merlin 3006.xxx Changelog
          is applied automatically (at ~100% multi-stream TCP collapses) and the
          burst is ~100 ms of traffic (64 KB .. 100 MB) - values from AM-Reaper's
          BCM4916 metal tuning, not yet verified on a GT-BE98.
+ - NEW: HW QoS Classful (QoS type 11), the Traditional QoS classes in
+         hardware upload queues with the flow accelerator left ON.  Classes
+         come from the usual user-defined QoS rules / priority pages.  The
+         flow accelerator takes a flow's egress queue from skb->mark bits
+         [2:0] (pktrunner: __skbMarkToQueuePriority = mark & 7), so the
+         class mark steers hardware-forwarded traffic: verified on a GT-BE98,
+         a marked 250 MB upload ran 124 MB in hardware with 2 packets through
+         the CPU, all in the marked queue.  The TM serves a higher queue
+         first, so priority 0..4 use queues 5..1 (the mark is inverted in this
+         mode only); each class queue gets PI2 AQM and its priority's maximum
+         rate as a cap, and the port shaper caps the total.  Not taken from
+         AM-Reaper: its queue delete-and-recreate (it cut IPv4 on a GT-BE98)
+         and guaranteed minimums (this TM accepts --minrate but keeps 0).
+         Rules based on transferred bytes are skipped in this mode - the
+         accelerator fixes a flow's class when it starts, so they would pin
+         big transfers in their first class.  Upload only; the optional
+         download limiter works here too.  Needs a dedicated WAN port (on the
+         GT-BE98: the 10G port, not the 2.5G one) and DHCP/static WAN.
+ - FIXED: HW AQM / Classful on a WAN that shares its port with the LAN
+         (GT-BE98 2.5G WAN = vlan4094 on eth1 with the RTL8372 LAN ports) did
+         nothing while showing as enabled; it now logs why and stays off.
+ - FIXED: logmessage() passed the message to syslog() as a format string.
+ - FIXED: with IPv6 on but no prefix yet, Traditional QoS wrote "-s /64"
+         and ip6tables-restore rejected the whole IPv6 rule set.
  - SECURITY: 37 small, self-contained fixes from the AM-Reaper series
          (github.com/TheUnboundDeveloper/AM-Reaper), applied as-is with their
          original authorship, each one only where it applied cleanly: IPsec /
