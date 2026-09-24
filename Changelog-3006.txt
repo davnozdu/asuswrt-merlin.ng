@@ -1,7 +1,7 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_beta4-dav25 (unreleased)
+3006.102.8_beta4-dav25 (24-Sep-2026)
  - NEW: HW AQM can now be selected on the QoS page (Adaptive QoS -> QoS ->
          QoS type -> HW AQM).  The backend came with the dav23 backport of
          Merlin 102.9 (qos_type=8): PI2 AQM plus an upload shaper programmed
@@ -13,16 +13,20 @@ Asuswrt-Merlin 3006.xxx Changelog
          measured line rate.  Offered only when the WAN is DHCP / Static IP
          (rc refuses PPPoE/PPTP/L2TP).  Switching to/from HW AQM or Cake no
          longer reboots, unless coming from an enabled Traditional QoS.
-         Status: `/tmp/qos stats` over SSH.
+         Status: `/tmp/qos stats` over SSH.  Verified on a GT-BE98 with the
+         WAN on the 10G port: port shaper and PI2 in the TM, accelerator on,
+         ~2-3 ms added latency under load.
  - NEW: optional download limiter for HW AQM, OFF by default (QoS page ->
          HW AQM -> Download limiter).  A hardware policer on the WAN port
          ingress (tmctl setportrxrate, nvram qos_ipolicer), so the flow
          accelerator stays on.  It drops rather than queues: it tames
          bufferbloat on big downloads but can add packet loss to calls and
          games, hence opt-in.  Enter the measured download speed; 10% headroom
-         is applied automatically (at ~100% multi-stream TCP collapses) and the
-         burst is ~100 ms of traffic (64 KB .. 100 MB) - values from AM-Reaper's
-         BCM4916 metal tuning, not yet verified on a GT-BE98.
+         is applied automatically (at ~100% multi-stream TCP collapses, per
+         AM-Reaper's BCM4916 tuning).  The burst asked for is ~100 ms of
+         traffic; the GT-BE98 hardware clamps it to ~1.5 MB.  Verified to be
+         programmed on a GT-BE98; enabling it logs one harmless kernel line
+         (_drv_policer_clear_profile).
  - NEW: HW QoS Classful (QoS type 11), the Traditional QoS classes in
          hardware upload queues with the flow accelerator left ON.  Classes
          come from the usual user-defined QoS rules / priority pages.  The
@@ -41,6 +45,8 @@ Asuswrt-Merlin 3006.xxx Changelog
          big transfers in their first class.  Upload only; the optional
          download limiter works here too.  Needs a dedicated WAN port (on the
          GT-BE98: the 10G port, not the 2.5G one) and DHCP/static WAN.
+         Verified on a GT-BE98 under a 100 Mbit/s cap: the high class got
+         ~80 Mbit/s and the low class ~7 Mbit/s, both fully hardware-forwarded.
  - FIXED: HW AQM / Classful on a WAN that shares its port with the LAN
          (GT-BE98 2.5G WAN = vlan4094 on eth1 with the RTL8372 LAN ports) did
          nothing while showing as enabled; it now logs why and stays off.
@@ -53,13 +59,18 @@ Asuswrt-Merlin 3006.xxx Changelog
          NTP / Samba / snmpd / dnsmasq / inadyn / iptables-restore command and
          config injection, a pre-auth httpd stack overflow and login-decode
          off-by-one, libpasswd `openssl passwd` injection, DHCP option 125
-         overflow, a stored XSS through LAN client names, avahi mDNS DoS
+         overflow, an attribute-injection XSS via a LAN device name (partial:
+         AM-Reaper's fuller client-picker fix did not apply cleanly and is not
+         included), avahi mDNS DoS
          (CVE-2023-38469/38470/38473, CVE-2025-68468/68471), net-snmp NULL
          varbind (CVE-2022-44792/44793), plus lighttpd, netatalk, quagga and
          libcodb bounds fixes.  Bug fixes: the stubby (DNS-over-TLS) restart
          in the watchdog was dead code, DDNS restarted every 30 s when IPv6
          lived on the other WAN, a duplicate psc6g default, and a benign
          blog_get_dstentry_by_id syslog flood from the flow accelerator.
+ - NOTE: dav24 already carried NAT loopback behind an ISP modem (double NAT /
+         DMZ: vts_hairpin, with STUN auto-detection of the public IP), which
+         was missing from its release notes.
 
 3006.102.8_beta4-dav24 (23-Sep-2026)
  - FIXED: first-time setup hung on the license agreement after a factory
