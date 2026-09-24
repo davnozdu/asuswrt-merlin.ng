@@ -2282,19 +2282,19 @@ function set_overhead(entry) {
 
 											</td>
 										</tr>
-										<tr id="hw_aqm_ipolicer_tr" style="display:none">
-											<th>Download limiter</th>
-											<td colspan="2">
-												<input id="ipolicer_on" name="ipolicer_radio" onClick="set_ipolicer(1);" type="radio" <% nvram_match("qos_ipolicer", "1","checked"); %>><label for="ipolicer_on"><#CTL_Activate#></label>
-												<input id="ipolicer_off" name="ipolicer_radio" onClick="set_ipolicer(0);" type="radio" <% nvram_match("qos_ipolicer", "0","checked"); %>><label for="ipolicer_off"><#CTL_Deactivate#></label>
-												<div style="color:#FC0;margin-top:5px;">Hardware policer on the WAN port: download traffic above 90% of the speed entered below is dropped. Reduces bufferbloat on large downloads, but can add packet loss to calls and games - leave it off unless the download side is the problem. Enter your measured download speed; the 10% headroom is applied automatically.</div>
-											</td>
-										</tr>
 										<tr id="download_tr">
 											<th><a class="hintstyle" href="javascript:void(0);" onClick="openHint(20, 2);"><#download_bandwidth#></a></th>
 											<td>
 												<input type="text" maxlength="10" id="ibw" name="ibw" onKeyPress="return validator.isNumberFloat(this,event);" class="input_15_table" value="" autocorrect="off" autocapitalize="off">
 												<label style="margin-left:5px;">Mb/s</label>
+											</td>
+										</tr>
+										<tr id="hw_aqm_ipolicer_tr" style="display:none">
+											<th>Download limiter</th>
+											<td colspan="2">
+												<input id="ipolicer_on" name="ipolicer_radio" onClick="set_ipolicer(1);" type="radio" <% nvram_match("qos_ipolicer", "1","checked"); %>><label for="ipolicer_on"><#CTL_Activate#></label>
+												<input id="ipolicer_off" name="ipolicer_radio" onClick="set_ipolicer(0);" type="radio" <% nvram_match("qos_ipolicer", "0","checked"); %>><label for="ipolicer_off"><#CTL_Deactivate#></label>
+												<div style="color:#FC0;margin-top:5px;">Hardware policer on the WAN port: download traffic above 90% of the download speed entered above is dropped. Reduces bufferbloat on large downloads, but can add packet loss to calls and games - leave it off unless the download side is the problem. Enter your measured download speed; the 10% headroom is applied automatically.</div>
 											</td>
 										</tr>
 										<tr id="wan_2_tr" style="display:none">
