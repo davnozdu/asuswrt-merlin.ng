@@ -1,6 +1,20 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav25 (unreleased)
+ - NEW: HW AQM can now be selected on the QoS page (Adaptive QoS -> QoS ->
+         QoS type -> HW AQM).  The backend came with the dav23 backport of
+         Merlin 102.9 (qos_type=8): PI2 AQM plus an upload shaper programmed
+         into the Broadcom Traffic Manager on the WAN port via tmctl, with the
+         flow accelerator left ON - unlike Traditional QoS / Bandwidth Limiter
+         / Cake, which all turn it off.  Only the web UI was missing; this is
+         a hand port of Merlin's 8fcd694a8e and 3480f3df8a onto our (pre-39995)
+         QoS_EZQoS.asp.  Upload only: set the upload speed to ~90-95% of the
+         measured line rate.  Offered only when the WAN is DHCP / Static IP
+         (rc refuses PPPoE/PPTP/L2TP).  Switching to/from HW AQM or Cake no
+         longer reboots, unless coming from an enabled Traditional QoS.
+         Status: `/tmp/qos stats` over SSH.
+
 3006.102.8_beta4-dav24 (23-Sep-2026)
  - FIXED: first-time setup hung on the license agreement after a factory
          reset (reported on dav22/dav23).  Flashing over an existing install
