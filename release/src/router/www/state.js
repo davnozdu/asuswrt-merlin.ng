@@ -5207,6 +5207,11 @@ function showWlHintContainer(_parm){
 }
 
 function checkPolicy() {
+    /* GT-BE98: no licence / privacy-policy pop-ups on every page.  The EULA is
+     * pre-signed in defaults.c and the ASUS cloud services that the privacy
+     * policy covers are not built; the documents stay reachable from
+     * Administration -> Privacy. */
+    return;
     const policyStatus = PolicyStatus()
         .then(data => {
             if (data.EULA == "0") {

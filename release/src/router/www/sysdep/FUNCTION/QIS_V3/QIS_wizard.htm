@@ -247,13 +247,13 @@
 						set_cfg_pause();
 					}
 
-                    const policyStatus = PolicyStatus()
-                        .then(data => {
-                            if (data.EULA == "0" || data.EULA_time == "") {
-                                goTo.EULA();
-                            } else if (data.EULA == 1 && ((data.PP == 1 && data.PP_time != "") || (data.PP == 0 && data.PP_time == ""))) {
-                                goTo.PP();
-                            } else {
+                    /* GT-BE98: no ASUS licence / privacy-policy screens before setup.
+                     * The EULA is pre-signed in defaults.c, the privacy policy stays
+                     * unsigned (the stock "decline" outcome), and QIS no longer waits
+                     * on the blob-backed PolicyStatus() - an uninitialised policy
+                     * state there is what hung first-time setup in dav22/dav23.
+                     * ?flag=EULA / ?flag=PP still open the documents on request. */
+                    {
                                 switch (urlParameter.get("flag") || "") {
                                     case "sitesurvey_rep":
                                         goTo.rpMode();
@@ -311,8 +311,7 @@
                                         goTo.Welcome();
                                         break;
                                 }
-                            }
-                        });
+                    }
 
 					if(initNvram.isError) setTimeout(arguments.callee, 1000);
 				}, 500);
