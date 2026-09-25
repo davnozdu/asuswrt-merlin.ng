@@ -3290,12 +3290,13 @@ unsigned int netdev_calc(char *ifname, char *ifname_desc, unsigned long long *rx
 		if(strcmp(word, ifname) == 0) {
 			if(strncmp(ifname, "wl", 2) == 0){
 				char unit_buf[8], *p1, *p2;
-				int len, idx;
+				int len, idx = i;	/* "wlN" has no '.', so the parse below is skipped */
 
 				p1 = strchr(word, '.');
 				p2 = strchr(word, 'l');
-				len = p1 - p2;
+				len = (p1 && p2) ? p1 - p2 : 0;
 				if(len > 0){
+					if(len > (int)sizeof(unit_buf)) len = sizeof(unit_buf);
 					snprintf(unit_buf, len, "%s", p2+1);
 					idx = atoi(unit_buf);
 				}
