@@ -23,6 +23,16 @@ Asuswrt-Merlin 3006.xxx Changelog
          Setup also no longer waits on the privacy-policy state of the closed
          code, which is what hung dav22/dav23 after a factory reset.  The
          documents remain under Administration -> Privacy.
+ - UPDATED: Wi-Fi radio firmware (rtecdc.bin for the 6717 and 6726 radios)
+         taken from the stock 3.0.0.6.102_39274 image - the firmware Asus
+         ships with exactly the driver we build from the 39274 GPL.  Ours was
+         a build from Oct 2025 with the Feb 2025 radio microcode (1892.42713);
+         the new one is built May 2026 with microcode 1892.42726 and adds MLO
+         link-abort timer and queue remap fixes.  Driver version unchanged
+         (17.10.369.39012).  Also eapd (Wi-Fi authentication / WPS event
+         daemon) and ethctl from the 39274 GPL, which the dav22 merge had
+         missed; every other kernel driver module already matches the stock
+         39274 image instruction for instruction.
  - FIXED: dav25 regression - a Port Forwarding rule whose port list has a
          space ("80, 443", which the page accepts and stores as typed) was
          silently dropped by the new iptables injection check.  Spaces are
