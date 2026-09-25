@@ -15934,127 +15934,347 @@ sr_get_chanim(const char *ifname, char *out, size_t outsz)
 		snprintf(out, outsz, "txop=%d busy=%d glitch=%d", txop, busy, glitch);
 }
 
-/* Auto mode: pick an OBSS-PD aggressiveness level from the measured air.
- * Spatial Reuse only helps when neighbouring BSS traffic (OBSS) actually
- * occupies airtime, so the level is driven by the OBSS percentage from
- * chanim_stats. A 2-level deadband avoids flapping; the level is capped at
- * 6 (threshold -70 dBm) so auto mode never gets aggressive enough to risk
- * ignoring the router's own clients. Returns the new level and fills a
- * human-readable status string for the web UI. */
-static int
-sr_compute_auto_level(const char *ifname, int cur_level, char *status, size_t ssz)
+/* Driver readback helper from watchdog.c (parses "wl sr_config"). */
+extern int wl_sr_config(char *ifname, int *nsrg_pdmin, int *nsrg_pdmax, int *srg_pdmin,
+	int *srg_pdmax, int *txpwrref, int *nsrg_txpwrref0, int *srg_txpwrref0);
+
+/* Per-radio tuner state, kept in /tmp so it never touches flash:
+ *   applied      level last written to (and read back from) the driver, -1 = unknown
+ *   hist/nhist   the last three OBSS samples, one per cron run (15 min apart)
+ *   frames/retr  wl counters txframe/txretrans at the previous run
+ *   base         retry ratio (per mille) of the interval before the last raise, -1 = none
+ *   raised_from  level before the last raise, -1 = no raise awaiting its check
+ *   holdoff      uptime (s) before which the level is not raised again
+ *   pending      1 = take the "after" snapshot on the next run */
+struct sr_state {
+	int applied, hist[3], nhist, base, raised_from, pending;
+	unsigned long frames, retr;
+	long holdoff;
+};
+
+static void
+sr_state_path(const char *ifname, char *path, size_t len)
 {
-	int txop = 0, busy = 0, glitch = 0, obss = 0, target, d, new_level;
+	snprintf(path, len, "/tmp/sr_state_%s", ifname);
+}
+
+static void
+sr_state_load(const char *ifname, struct sr_state *st)
+{
+	char path[64];
+	FILE *fp;
+
+	memset(st, 0, sizeof(*st));
+	st->applied = -1;
+	st->base = -1;
+	st->raised_from = -1;
+	sr_state_path(ifname, path, sizeof(path));
+	if ((fp = fopen(path, "r")) == NULL)
+		return;
+	if (fscanf(fp, "%d %d %d %d %d %lu %lu %d %d %ld %d", &st->applied, &st->hist[0], &st->hist[1],
+		   &st->hist[2], &st->nhist, &st->frames, &st->retr, &st->base, &st->raised_from,
+		   &st->holdoff, &st->pending) != 11) {
+		memset(st, 0, sizeof(*st));
+		st->applied = -1;
+		st->base = -1;
+		st->raised_from = -1;
+	}
+	fclose(fp);
+	if (st->nhist < 0 || st->nhist > 3)
+		st->nhist = 0;
+}
+
+static void
+sr_state_save(const char *ifname, const struct sr_state *st)
+{
+	char path[64];
+	FILE *fp;
+
+	sr_state_path(ifname, path, sizeof(path));
+	if ((fp = fopen(path, "w")) == NULL)
+		return;
+	fprintf(fp, "%d %d %d %d %d %lu %lu %d %d %ld %d\n", st->applied, st->hist[0], st->hist[1],
+		st->hist[2], st->nhist, st->frames, st->retr, st->base, st->raised_from,
+		st->holdoff, st->pending);
+	fclose(fp);
+}
+
+/* txframe / txretrans from "wl counters"; returns 0 when both were found. */
+static int
+sr_read_counters(const char *ifname, unsigned long *frames, unsigned long *retr)
+{
+	FILE *fp;
+	char cmd[64], word[64], prev[64] = "";
+	int found = 0;
+
+	snprintf(cmd, sizeof(cmd), "wl -i %s counters", ifname);
+	if ((fp = popen(cmd, "r")) == NULL)
+		return -1;
+	while (fscanf(fp, "%63s", word) == 1) {
+		if (!strcmp(prev, "txframe")) {
+			*frames = strtoul(word, NULL, 10);
+			found |= 1;
+		}
+		else if (!strcmp(prev, "txretrans")) {
+			*retr = strtoul(word, NULL, 10);
+			found |= 2;
+		}
+		strlcpy(prev, word, sizeof(prev));
+	}
+	pclose(fp);
+	return (found == 3) ? 0 : -1;
+}
+
+static long
+sr_uptime(void)
+{
+	struct sysinfo si;
+
+	return (sysinfo(&si) == 0) ? si.uptime : 0;
+}
+
+/* OBSS percentage -> aggressiveness level; capped at 6 (threshold -70 dBm) so
+ * auto mode never gets aggressive enough to risk ignoring the router's own
+ * clients.  Spatial Reuse only helps when neighbouring BSS traffic (OBSS)
+ * actually occupies airtime. */
+static int
+sr_obss_target(int obss)
+{
+	if (obss < 8)   return 0;
+	if (obss < 15)  return 2;
+	if (obss < 25)  return 3;
+	if (obss < 35)  return 4;
+	if (obss < 50)  return 5;
+	return 6;
+}
+
+static int
+sr_median(const int *v, int n)
+{
+	int a[3], i, j, t;
+
+	for (i = 0; i < n; i++)
+		a[i] = v[i];
+	for (i = 0; i < n; i++)
+		for (j = i + 1; j < n; j++)
+			if (a[j] < a[i]) { t = a[i]; a[i] = a[j]; a[j] = t; }
+	return a[n / 2];
+}
+
+/* Auto mode decision for one radio.
+ *  - Raise only on a sustained reading: the median of the last three runs
+ *    (at least two) must call for at least two levels more, and not while a
+ *    rollback hold-off is running.
+ *  - Lower at once from the current reading (always allowed to turn off).
+ *  - After a raise, compare the radio's retry ratio over the next interval with
+ *    the interval before it; if it grew by more than 30% (plus 0.5 points),
+ *    go back to the previous level and do not raise again for two hours. */
+static int
+sr_auto_level(const char *ifname, struct sr_state *st, int cur_level, char *status, size_t ssz)
+{
+	int txop = 0, busy = 0, glitch = 0, obss = 0, now_target, med_target, level = cur_level;
+	unsigned long frames = 0, retr = 0;
+	int ratio = -1;	/* per mille, -1 = not enough traffic to tell */
+	long now = sr_uptime();
+	const char *why = "";
 
 	if (sr_read_chanim(ifname, &txop, &busy, &glitch, &obss) != 0) {
 		snprintf(status, ssz, "Auto: no data");
 		return cur_level;
 	}
 
-	if (obss < 8)        target = 0;
-	else if (obss < 15)  target = 2;
-	else if (obss < 25)  target = 3;
-	else if (obss < 35)  target = 4;
-	else if (obss < 50)  target = 5;
-	else                 target = 6;
+	if (sr_read_counters(ifname, &frames, &retr) == 0) {
+		if (st->frames && frames > st->frames && frames - st->frames >= 500 && retr >= st->retr)
+			ratio = (int) ((retr - st->retr) * 1000 / (frames - st->frames));
+		st->frames = frames;
+		st->retr = retr;
+	}
 
-	d = (target > cur_level) ? (target - cur_level) : (cur_level - target);
-	new_level = cur_level;
-	if (target == 0 || d >= 2)	/* deadband 2, but always allow turning off */
-		new_level = target;
-	if (new_level < 0) new_level = 0;
-	if (new_level > 10) new_level = 10;
+	/* sliding window of the last three OBSS readings */
+	if (st->nhist < 3)
+		st->hist[st->nhist++] = obss;
+	else {
+		st->hist[0] = st->hist[1];
+		st->hist[1] = st->hist[2];
+		st->hist[2] = obss;
+	}
 
-	snprintf(status, ssz, "Auto: level %d (OBSS %d%%, busy %d%%)", new_level, obss, busy);
-	return new_level;
+	/* quality check of the previous raise */
+	if (st->raised_from >= 0) {
+		if (st->base >= 0 && ratio >= 0 && ratio > st->base * 13 / 10 + 5) {
+			level = st->raised_from;
+			st->holdoff = now + 7200;
+			why = ", rolled back: retries rose";
+		}
+		st->raised_from = -1;
+		st->base = -1;
+	}
+
+	if (!*why) {
+		now_target = sr_obss_target(obss);
+		med_target = sr_obss_target(sr_median(st->hist, st->nhist));
+		if (now_target < level && (now_target == 0 || level - now_target >= 2))
+			level = now_target;
+		else if (st->nhist >= 2 && med_target >= level + 2) {
+			if (now < st->holdoff)
+				why = ", raise on hold";
+			else {
+				st->raised_from = level;
+				st->base = ratio;
+				level = med_target;
+			}
+		}
+	}
+
+	if (level < 0) level = 0;
+	if (level > 10) level = 10;
+
+	snprintf(status, ssz, "Auto: level %d (OBSS %d%%, busy %d%%%s)", level, obss, busy, why);
+	return level;
+}
+
+/* nvram_set() only when the value differs; returns 1 if it changed */
+static int
+sr_nv_set(const char *name, const char *val)
+{
+	if (!strcmp(nvram_safe_get(name), val))
+		return 0;
+	nvram_set(name, val);
+	return 1;
+}
+
+/* Does the driver hold the thresholds that belong to this level? */
+static int
+sr_driver_matches(const char *ifname, int level)
+{
+	int nmin = 1, nmax = 1, smin = 1, smax = 1, a, b, c;
+	int lo = -82, hi = -62;
+
+	if (wl_sr_config((char *) ifname, &nmin, &nmax, &smin, &smax, &a, &b, &c) != 0 || nmin == 1)
+		return 0;	/* unreadable: treat as not applied */
+	if (level > 0) {
+		lo = hi = -82 + level * 2;
+		if (lo > -62) lo = hi = -62;
+	}
+	return nmin == lo && nmax == hi && smin == lo && smax == hi;
 }
 
 void
 apply_spatial_reuse(void)
 {
 	char prefix[] = "wlXXXXXXXXXX_";
-	char tmp[64], ifname[16], snap[64], val[8];
-	int unit, max_unit, any_auto = 0;
+	char tmp[64], ifname[16], snap[64], val[8], lvlbuf[8];
+	int unit, max_unit, any_auto = 0, persist = 0, measure = 0;
+	int changed_unit[MAX_NR_WL_IF] = { 0 };
 
 	if (get_model() != MODEL_GTBE98)
 		return;
 
 	max_unit = num_of_wl_if();
-	for (unit = 0; unit < max_unit; unit++) {
-		int level, t;
+	for (unit = 0; unit < max_unit && unit < MAX_NR_WL_IF; unit++) {
+		struct sr_state st;
+		int level, cur_level, is_auto, ok;
+		char status[112];
 
 		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
 		strlcpy(ifname, nvram_safe_get(strcat_r(prefix, "ifname", tmp)), sizeof(ifname));
 		if (!*ifname)
 			continue;
 
-		if (nvram_get_int(strcat_r(prefix, "sr_auto", tmp)) == 1) {
-			/* Auto mode: derive the level from the measured air and store
-			 * both the chosen level and a status string for the web UI. */
-			char status[96], lvlbuf[8];
+		sr_state_load(ifname, &st);
 
+		/* the "after" half of the previous auto change, one interval later */
+		if (st.pending) {
+			sr_get_chanim(ifname, snap, sizeof(snap));
+			nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
+			st.pending = 0;
+		}
+
+		cur_level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
+		is_auto = (nvram_get_int(strcat_r(prefix, "sr_auto", tmp)) == 1);
+		if (is_auto) {
 			any_auto = 1;
-			level = sr_compute_auto_level(ifname,
-				nvram_get_int(strcat_r(prefix, "sr_level", tmp)),
-				status, sizeof(status));
-			snprintf(lvlbuf, sizeof(lvlbuf), "%d", level);
-			nvram_set(strcat_r(prefix, "sr_level", tmp), lvlbuf);
-			nvram_set(strcat_r(prefix, "sr_auto_status", tmp), status);
+			level = sr_auto_level(ifname, &st, cur_level, status, sizeof(status));
 		} else {
-			level = nvram_get_int(strcat_r(prefix, "sr_level", tmp));
-			nvram_set(strcat_r(prefix, "sr_auto_status", tmp), "");
+			level = cur_level;
+			status[0] = '\0';
 		}
 		if (level < 0) level = 0;
 		if (level > 10) level = 10;
 
-		/* snapshot "before" */
-		sr_get_chanim(ifname, snap, sizeof(snap));
-		nvram_set(strcat_r(prefix, "sr_chanim_before", tmp), snap);
-
+		/* persisted settings (what bsc_sr_check() reapplies after a reboot) */
+		snprintf(lvlbuf, sizeof(lvlbuf), "%d", level);
+		persist |= sr_nv_set(strcat_r(prefix, "sr_level", tmp), lvlbuf);
 		if (level > 0) {
-			t = -82 + level * 2;	/* map 1..10 -> -80..-62 dBm */
-			if (t < -82) t = -82;
+			int t = -82 + level * 2;	/* map 1..10 -> -80..-62 dBm */
 			if (t > -62) t = -62;
 			snprintf(val, sizeof(val), "%d", t);
-			/* Persist to nvram so the watchdog's bsc_sr_check() reapplies
-			 * the thresholds after a reboot (sr_config=1 gates that block);
-			 * also apply live now for immediate feedback without a Wi-Fi
-			 * restart. */
-			nvram_set(strcat_r(prefix, "sr_config", tmp), "1");
-			nvram_set(strcat_r(prefix, "srg_pdmin", tmp), val);
-			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), val);
-			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), val);
-			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), val);
-			eval("wl", "-i", ifname, "sr_config", "srg_pdmin", val);
-			eval("wl", "-i", ifname, "sr_config", "srg_pdmax", val);
-			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmin", val);
-			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmax", val);
+			persist |= sr_nv_set(strcat_r(prefix, "sr_config", tmp), "1");
+			persist |= sr_nv_set(strcat_r(prefix, "srg_pdmin", tmp), val);
+			persist |= sr_nv_set(strcat_r(prefix, "srg_pdmax", tmp), val);
+			persist |= sr_nv_set(strcat_r(prefix, "nsrg_pdmin", tmp), val);
+			persist |= sr_nv_set(strcat_r(prefix, "nsrg_pdmax", tmp), val);
 		} else {
-			/* OFF: disable advanced SR, clear persisted thresholds (so the
-			 * watchdog leaves the radio alone) and restore the driver
-			 * defaults live. */
-			nvram_set(strcat_r(prefix, "sr_config", tmp), "0");
-			nvram_set(strcat_r(prefix, "srg_pdmin", tmp), "");
-			nvram_set(strcat_r(prefix, "srg_pdmax", tmp), "");
-			nvram_set(strcat_r(prefix, "nsrg_pdmin", tmp), "");
-			nvram_set(strcat_r(prefix, "nsrg_pdmax", tmp), "");
-			eval("wl", "-i", ifname, "sr_config", "srg_pdmin", "-82");
-			eval("wl", "-i", ifname, "sr_config", "srg_pdmax", "-62");
-			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmin", "-82");
-			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmax", "-62");
+			/* OFF: no persisted thresholds, so the watchdog leaves the radio alone */
+			persist |= sr_nv_set(strcat_r(prefix, "sr_config", tmp), "0");
+			persist |= sr_nv_set(strcat_r(prefix, "srg_pdmin", tmp), "");
+			persist |= sr_nv_set(strcat_r(prefix, "srg_pdmax", tmp), "");
+			persist |= sr_nv_set(strcat_r(prefix, "nsrg_pdmin", tmp), "");
+			persist |= sr_nv_set(strcat_r(prefix, "nsrg_pdmax", tmp), "");
 		}
+
+		/* Touch the driver only when it does not already hold this level's
+		 * thresholds (level changed, or restart_wireless reset them), then
+		 * read them back. */
+		ok = 1;
+		if (sr_driver_matches(ifname, level))
+			st.applied = level;
+		else {
+			const char *lo, *hi;
+
+			snprintf(val, sizeof(val), "%d", level > 0 ? ((-82 + level * 2) > -62 ? -62 : (-82 + level * 2)) : -82);
+			lo = val;
+			hi = (level > 0) ? val : "-62";
+
+			sr_get_chanim(ifname, snap, sizeof(snap));
+			nvram_set(strcat_r(prefix, "sr_chanim_before", tmp), snap);
+
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmin", (char *) lo);
+			eval("wl", "-i", ifname, "sr_config", "srg_pdmax", (char *) hi);
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmin", (char *) lo);
+			eval("wl", "-i", ifname, "sr_config", "nsrg_pdmax", (char *) hi);
+
+			ok = sr_driver_matches(ifname, level);
+			st.applied = ok ? level : -1;
+			if (is_auto)
+				st.pending = 1;		/* "after" at the next run */
+			else
+				changed_unit[unit] = measure = 1;	/* user change: measure now */
+		}
+
+		if (is_auto) {
+			if (!ok)
+				strlcat(status, " - driver readback mismatch", sizeof(status));
+		} else if (!ok)
+			strlcpy(status, "Driver readback mismatch", sizeof(status));
+		/* status is informational: set it, but it never forces a commit */
+		sr_nv_set(strcat_r(prefix, "sr_auto_status", tmp), status);
+
+		sr_state_save(ifname, &st);
 	}
 
-	sleep(2);
-
-	/* snapshot "after" */
-	for (unit = 0; unit < max_unit; unit++) {
-		snprintf(prefix, sizeof(prefix), "wl%d_", unit);
-		strlcpy(ifname, nvram_safe_get(strcat_r(prefix, "ifname", tmp)), sizeof(ifname));
-		if (!*ifname)
-			continue;
-		sr_get_chanim(ifname, snap, sizeof(snap));
-		nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
+	/* A level the user just set by hand gets its before/after measurement now,
+	 * as the web page expects; routine cron runs never sleep here. */
+	if (measure) {
+		sleep(2);
+		for (unit = 0; unit < max_unit && unit < MAX_NR_WL_IF; unit++) {
+			if (!changed_unit[unit])
+				continue;
+			snprintf(prefix, sizeof(prefix), "wl%d_", unit);
+			strlcpy(ifname, nvram_safe_get(strcat_r(prefix, "ifname", tmp)), sizeof(ifname));
+			sr_get_chanim(ifname, snap, sizeof(snap));
+			nvram_set(strcat_r(prefix, "sr_chanim_after", tmp), snap);
+		}
 	}
 
 	/* Install or remove the 15-minute autotune cron job depending on whether
@@ -16064,7 +16284,9 @@ apply_spatial_reuse(void)
 	else
 		eval("cru", "d", "sr_autotune");
 
-	nvram_commit();
+	/* flash is written only when a persisted setting actually changed */
+	if (persist)
+		nvram_commit();
 }
 
 /* GT-BE98 NAT loopback behind an ISP modem (vts_hairpin, see
