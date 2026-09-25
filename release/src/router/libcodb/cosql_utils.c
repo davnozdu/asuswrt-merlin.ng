@@ -328,6 +328,30 @@ static int is_valid_sql_identifier(const char* s)
 	return FORMAT_OK;
 }
 
+/* A query column is either a bare identifier or one aggregate over one, e.g.
+ * "SUM(up_ttl_bytes)" as httpd's traffic-quota CGI asks for. */
+static int is_valid_sql_query_column(const char* s)
+{
+	static const char *aggr[] = { "SUM(", "AVG(", "MIN(", "MAX(", "COUNT(" };
+	char ident[64];
+	size_t i, n, len;
+
+	if (is_valid_sql_identifier(s) == FORMAT_OK)
+		return FORMAT_OK;
+	if (!s)
+		return FORMAT_ERROR;
+	len = strlen(s);
+	for (i = 0; i < sizeof(aggr)/sizeof(aggr[0]); i++) {
+		n = strlen(aggr[i]);
+		if (len > n + 1 && strncmp(s, aggr[i], n) == 0 && s[len-1] == ')' && len - n - 1 < sizeof(ident)) {
+			memcpy(ident, s + n, len - n - 1);
+			ident[len - n - 1] = '\0';
+			return is_valid_sql_identifier(ident);
+		}
+	}
+	return FORMAT_ERROR;
+}
+
 static int is_valid_text_mac(const char* input) 
 {
 	if(!input) {
@@ -1982,7 +2006,7 @@ int cosql_get_column_values(sqlite3* pdb,
 	for (i=0; i<query_columns_count; i++) {
 		char *column_name = query_columns->name;
 
-		if (column_name!=NULL && strlen(column_name)>0 && is_valid_sql_identifier(column_name)==FORMAT_OK) {
+		if (column_name!=NULL && strlen(column_name)>0 && is_valid_sql_query_column(column_name)==FORMAT_OK) {
 
 			if (strlen(sql_column_names)>0) {
 				strncat(sql_column_names, ",", 1);
