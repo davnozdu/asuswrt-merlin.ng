@@ -1,6 +1,57 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav26 (unreleased)
+ - CHANGED: the ASUS cloud services are no longer built: Alexa and Google
+         Assistant, the AAE/mastiff tunnel (remote access from the ASUS Router
+         app through ASUS relays), the asd daemon that downloads definitions
+         from ASUS, ASUS account binding and the AWS IoT client.  The classic
+         asuscomm.com DDNS keeps working (only its account-linked variant is
+         gone), as do AiMesh, OpenVPN/WireGuard, the IPsec/Instant Guard
+         server and Trend Micro (AiProtection, Adaptive QoS).  AiCloud/WebDAV
+         were already not built; its last piece, get_webdavInfo.asp, which
+         httpd served without a login, is gone too.  The closed ASUS blobs
+         still call a few of the removed functions, so those stay as inert
+         stand-ins (checked against every symbol the GT-BE98 blobs import,
+         including the prebuilt nt_center, which would otherwise not start).
+         The image also gets smaller.
+ - CHANGED: first-time setup no longer shows the ASUS licence and privacy
+         policy screens, and no policy pop-up appears on every page after
+         login (after AM-Reaper).  The licence is pre-signed; the privacy
+         policy stays unsigned, as when it is declined.  The setup wizard
+         itself stays, because it sets the router login and the Wi-Fi key.
+         Setup also no longer waits on the privacy-policy state of the closed
+         code, which is what hung dav22/dav23 after a factory reset.  The
+         documents remain under Administration -> Privacy.
+ - FIXED: dav25 regression - a Port Forwarding rule whose port list has a
+         space ("80, 443", which the page accepts and stores as typed) was
+         silently dropped by the new iptables injection check.  Spaces are
+         now removed before the check.
+ - FIXED: with Cake the mangle table was never flushed, so every firewall
+         restart (WAN up, DDNS, VPN) added another copy of its rules.
+ - FIXED: HW AQM / Classful could treat a VLAN WAN whose port could not be
+         determined as a port of its own; it now stays off and logs why.
+ - FIXED: Traffic Monitor labelled wlN radio interfaces with an
+         uninitialised band number.
+ - SECURITY: the next round from AM-Reaper, each fix checked against this
+         tree before being taken, several adapted: dnsmasq / inadyn config
+         injection through a static-lease MAC, the LAN domain and the DDNS
+         hostname (for inadyn also a space, which libconfuse treats as a
+         separator); IPsec profile name and port-forward source IP injection;
+         the full fix for the stored XSS in the client picker (a LAN device's
+         DHCP name); strongSwan identity double free (CVE-2026-47895, which
+         also reaches our 5.9.13 through a peer's EAP identity "@#");
+         NordVPN/HMA quote injection; WireGuard route lines; a netool format
+         string; an open redirect in page_default.cgi (Reaper's check missed
+         "/host"); an out-of-bounds read in the httpd path check; SQL value
+         quoting in libcodb; a stack overflow from a QoS rule address; an
+         atoi() overflow in the qos_type check; hardening in infosvr, OpenVPN,
+         rstats, lanauth and udhcpc; escaping on the VPN status page.  Not
+         taken after checking: fixes for code this tree does not have or that
+         ASUS already fixed, HTML escaping that would double-encode names here
+         (AiMesh map, USB folder tree), and TLS certificate enforcement in
+         mssl, which cannot be tested without hardware.
+
 3006.102.8_beta4-dav25 (24-Sep-2026)
  - NEW: HW AQM can now be selected on the QoS page (Adaptive QoS -> QoS ->
          QoS type -> HW AQM).  The backend came with the dav23 backport of
@@ -56,8 +107,8 @@ Asuswrt-Merlin 3006.xxx Changelog
  - SECURITY: 37 small, self-contained fixes from the AM-Reaper series
          (github.com/TheUnboundDeveloper/AM-Reaper), applied as-is with their
          original authorship, each one only where it applied cleanly: IPsec /
-         NTP / Samba / snmpd / dnsmasq / inadyn / iptables-restore command and
-         config injection, a pre-auth httpd stack overflow and login-decode
+         NTP / Samba / snmpd / iptables-restore command and config injection,
+         an httpd upload-boundary stack overflow and a pre-auth login-decode
          off-by-one, libpasswd `openssl passwd` injection, DHCP option 125
          overflow, an attribute-injection XSS via a LAN device name (partial:
          AM-Reaper's fuller client-picker fix did not apply cleanly and is not
