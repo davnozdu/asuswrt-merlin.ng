@@ -2736,6 +2736,15 @@ int add_iQosRules(char *pcWANIF)
 
 	if (pcWANIF == NULL || nvram_get_int("qos_type") == 1 || nvram_get_int("qos_type") == 8) return -1;
 
+	/* Cake builds no mangle rules, yet mangle_setting() leaves the mangle flush
+	 * to the rule builders for it (only A.QoS and BCM TM take its own flush
+	 * branch).  Without this, every start_firewall() - WAN up, DDNS, VPN -
+	 * appended another copy of the rules mangle_setting() adds afterwards. */
+	if (IS_CAKE_QOS()) {
+		del_iQosRules();
+		return 0;
+	}
+
 	if (IS_HWQOS_CLASSFUL()) {
 		/* start_bcm_tm() refuses to run without an upload rate or a usable
 		 * WAN port: do not leave class marks behind with nothing using them
