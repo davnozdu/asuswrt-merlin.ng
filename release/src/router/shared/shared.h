@@ -5716,9 +5716,8 @@ struct ads_info {
 };
 #endif
 
-#if defined(RTCONFIG_ACCOUNT_BINDING)
+/* always declared: prebuilt web_hook.o and conn_diag-sql.o call it */
 extern int is_account_bound();
-#endif
 
 #ifdef RTCONFIG_SW_SPDLED
 struct devif_spdled {

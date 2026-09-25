@@ -516,7 +516,11 @@ CFLAGS  += -I$(TOP)/sw-hw-auth
 vpath %.c $(TOP)/sw-hw-auth
 endif
 
-ifeq ($(RTCONFIG_TUNNEL),y)
+# aae_ipc.o is a self-contained unix-socket client; the prebuilt httpd
+# web_hook.o and libwebapi priv_webapi.o call aae_sendIpcMsg*() even when the
+# AAE tunnel is not built, so it stays in libshared (with no daemon the IPC just
+# fails).
+ifneq ($(or $(filter y,$(RTCONFIG_TUNNEL)),$(wildcard $(TOP)/aaews/prebuild/$(BUILD_NAME)/aae_ipc.o)),)
 OBJS += aae_ipc.o
 CFLAGS  += -I$(TOP)/aaews
 vpath %.c $(TOP)/aaews

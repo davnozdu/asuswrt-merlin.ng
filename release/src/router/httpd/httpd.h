@@ -195,8 +195,9 @@ struct wl_sync_nvram {
 #define HTTPD_AUTH_V2   1
 
 
-#if defined(RTCONFIG_IFTTT) || defined(RTCONFIG_ALEXA) || defined(RTCONFIG_GOOGLE_ASST)
+/* the prebuilt web_hook.o calls add_ifttt_flag() whatever the voice-assistant flags say */
 #define IFTTTUSERAGENT  "asusrouter-Windows-IFTTT-1.0"
+#if defined(RTCONFIG_IFTTT) || defined(RTCONFIG_ALEXA) || defined(RTCONFIG_GOOGLE_ASST)
 #define GETIFTTTCGI     "get_IFTTTPincode.cgi"
 #define GETIFTTTOKEN "get_IFTTTtoken.cgi"
 #endif
@@ -520,9 +521,7 @@ extern time_t login_timestamp_cache;
 extern int hook_get_json;
 extern char wl_band_list[8][8];
 extern int check_user_agent(char* user_agent);
-#if defined(RTCONFIG_IFTTT) || defined(RTCONFIG_ALEXA) || defined(RTCONFIG_GOOGLE_ASST)
 extern void add_ifttt_flag(void);
-#endif
 extern char HTTPD_LOGIN_FAIL_LAN[32];
 extern char HTTPD_LOGIN_FAIL_WAN[32];
 extern char HTTPD_LAST_LOGIN_FAIL_TS[32];

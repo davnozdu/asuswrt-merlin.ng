@@ -258,9 +258,7 @@ static void handle_request(void);
 void send_login_page(int fromapp_flag, int error_status, char* url, char* file, int lock_time, int logintry);
 void page_default_redirect(int fromapp_flag, char* url);
 int check_user_agent(char* user_agent);
-#if defined(RTCONFIG_IFTTT) || defined(RTCONFIG_ALEXA) || defined(RTCONFIG_GOOGLE_ASST)
 void add_ifttt_flag(void);
-#endif
 #ifdef RTCONFIG_NEW_PHYMAP
 extern int save_iptv_port(char *isp);
 #endif
@@ -868,14 +866,14 @@ int web_write(const char *buffer, int len, FILE *stream)
 	return r;
 }
 
-#if defined(RTCONFIG_IFTTT) || defined(RTCONFIG_ALEXA) || defined(RTCONFIG_GOOGLE_ASST)
+/* always built: the prebuilt web_hook.o calls it from auth_check even without
+ * RTCONFIG_IFTTT/ALEXA/GOOGLE_ASST */
 void add_ifttt_flag(void){
 
 	memset(user_agent, 0, sizeof(user_agent));
 	snprintf(user_agent, sizeof(user_agent), "%s",IFTTTUSERAGENT);
 	return;
 }
-#endif
 
 #if 0
 void

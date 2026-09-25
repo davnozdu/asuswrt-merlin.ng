@@ -2122,6 +2122,10 @@ define RouterOptions
 		sed -i "/RTCONFIG_LIBASC/d" $(1); \
 		echo "RTCONFIG_LIBASC=y" >>$(1); \
 	fi;
+	if [ "$(LIBASC)" = "y" ]; then \
+		sed -i "/RTCONFIG_LIBASC/d" $(1); \
+		echo "RTCONFIG_LIBASC=y" >>$(1); \
+	fi;
 	if [ "$(MXL371X)" = "y" ]; then \
 		sed -i "/RTCONFIG_MXL371X/d" $(1); \
 		echo "RTCONFIG_MXL371X=y" >>$(1); \
@@ -4273,6 +4277,14 @@ define RouterOptions
 		else \
 			echo "# RTCONFIG_DIS_HASH_KEY_GEN_CHECK is not set" >>$(1); \
 		fi; \
+	fi;
+	if [ "$(ACCOUNT_BINDING)" = "n" ]; then \
+		sed -i "/RTCONFIG_ACCOUNT_BINDING/d" $(1); \
+		echo "# RTCONFIG_ACCOUNT_BINDING is not set" >>$(1); \
+	fi;
+	if [ "$(AWSIOT)" = "n" ]; then \
+		sed -i "/RTCONFIG_AWSIOT/d" $(1); \
+		echo "# RTCONFIG_AWSIOT is not set" >>$(1); \
 	fi;
 	sed -i "/RTCONFIG_BATMAN_ADV/d" $(1); \
 	if [ "$(BATMAN)" = "y" ]; then \

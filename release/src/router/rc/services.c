@@ -6919,6 +6919,11 @@ void start_asd(void)
 	stop_asd();
 	xstart("asd");
 }
+#else
+/* the prebuilt rc private.o calls start_asd() even when asd is not built */
+void start_asd(void)
+{
+}
 #endif /* RTCONFIG_ASD */
 
 #ifdef RTCONFIG_GEARUPPLUGIN

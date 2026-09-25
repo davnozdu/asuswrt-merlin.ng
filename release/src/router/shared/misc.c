@@ -7413,18 +7413,21 @@ int vpnc_use_tunnel(int vpnc_unit, const char* proto)
 }
 #endif
 
-#if defined(RTCONFIG_ACCOUNT_BINDING)
+/* Always built: the prebuilt web_hook.o and conn_diag-sql.o call it.  Without
+ * RTCONFIG_ACCOUNT_BINDING there is no binding code at all, so report "not bound"
+ * even if an earlier firmware left oauth_* values behind in nvram. */
 int is_account_bound()
 {
+#if defined(RTCONFIG_ACCOUNT_BINDING)
 	if (nvram_match("oauth_auth_status", "2") &&
 		nvram_invmatch("oauth_dm_cusid", "") &&
 		nvram_invmatch("oauth_dm_refresh_ticket", "")) {
 		return 1;
 	}
+#endif
 
 	return 0;
 }
-#endif
 
 char *make_salt(char *scheme_id, char *buf, size_t size)
 {
