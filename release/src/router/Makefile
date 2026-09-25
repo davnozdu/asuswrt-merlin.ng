@@ -830,9 +830,9 @@ obj-y += nvram$(BCMEX)$(EX7)
 
 obj-$(RTCONFIG_LIBASUSLOG) += libasuslog
 obj-$(RTCONFIG_SW_HW_AUTH) += sw-hw-auth
-ifeq ($(RTCONFIG_TUNNEL),y)
+# libws.so: the prebuilt nt_center, nt_monitor and Notify_Event2NC link
+# against it even without the AAE tunnel (GT-BE98 builds without it).
 obj-$(RTCONFIG_NOTIFICATION_CENTER) += wb
-endif
 obj-$(RTCONFIG_NOTIFICATION_CENTER) += json-c
 obj-$(RTCONFIG_NOTIFICATION_CENTER) += sqlite
 obj-$(RTCONFIG_NOTIFICATION_CENTER) += nt_center
