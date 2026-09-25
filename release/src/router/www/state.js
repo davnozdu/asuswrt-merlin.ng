@@ -5210,8 +5210,9 @@ function checkPolicy() {
     /* GT-BE98: no licence / privacy-policy pop-ups on every page.  The EULA is
      * pre-signed in defaults.c and the ASUS cloud services that the privacy
      * policy covers are not built; the documents stay reachable from
-     * Administration -> Privacy. */
-    return;
+     * Administration -> Privacy.  Other models keep the stock check. */
+    if (based_modelid == "GT-BE98")
+        return;
     const policyStatus = PolicyStatus()
         .then(data => {
             if (data.EULA == "0") {
