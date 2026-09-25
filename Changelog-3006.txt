@@ -1,7 +1,7 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_beta4-dav26 (unreleased)
+3006.102.8_beta4-dav26 (25-Sep-2026)
  - CHANGED: the ASUS cloud services are no longer built: Alexa and Google
          Assistant, the AAE/mastiff tunnel (remote access from the ASUS Router
          app through ASUS relays), the asd daemon that downloads definitions
@@ -32,7 +32,8 @@ Asuswrt-Merlin 3006.xxx Changelog
          (17.10.369.39012).  Also eapd (Wi-Fi authentication / WPS event
          daemon) and ethctl from the 39274 GPL, which the dav22 merge had
          missed; every other kernel driver module already matches the stock
-         39274 image instruction for instruction.
+         39274 image instruction for instruction.  Verified on a GT-BE98: all
+         four radios load the new firmware and beacon, clients associate.
  - FIXED: dav25 regression - a Port Forwarding rule whose port list has a
          space ("80, 443", which the page accepts and stores as typed) was
          silently dropped by the new iptables injection check.  Spaces are
