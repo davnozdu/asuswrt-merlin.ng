@@ -1,6 +1,15 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav27 (unreleased)
+ - IMPROVED: Spatial Reuse auto-tune no longer writes nvram to flash or
+         touches the Wi-Fi driver every 15 minutes when nothing changes; it
+         raises the OBSS-PD level only on a sustained reading, checks the
+         driver after applying, and rolls a raise back (holding further
+         raises for 2 h) when the radio's retries grow.
+ - CHANGED: the licence / privacy-policy screens are skipped on GT-BE98
+         only; other models keep the stock flow in the shared web files.
+
 3006.102.8_beta4-dav26 (25-Sep-2026)
  - CHANGED: the ASUS cloud services are no longer built: Alexa and Google
          Assistant, the AAE/mastiff tunnel (remote access from the ASUS Router
