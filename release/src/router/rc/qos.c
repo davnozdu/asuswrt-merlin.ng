@@ -3025,21 +3025,33 @@ int start_cake(void)
 #define QOS_TARGET_MS       100
 #define QOS_WRED_TARGET_MS  10
 /* tmctl only knows physical ports: map a VLAN WAN (e.g. vlan4094@eth1) to its
- * real device; anything else is returned unchanged. */
-static void bcm_tm_phy_ifname(const char *ifname, char *phy, size_t len)
+ * real device; anything else is returned unchanged.  Returns -1 when that
+ * cannot be determined (interface missing, no socket, unexpected ioctl error),
+ * so the caller never takes an unmapped VLAN for a port of its own. */
+static int bcm_tm_phy_ifname(const char *ifname, char *phy, size_t len)
 {
 	struct vlan_ioctl_args ifv;
-	int s;
+	int s, ret = 0;
 
 	strlcpy(phy, ifname, len);
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-		return;
+		return -1;
 	memset(&ifv, 0, sizeof(ifv));
 	strlcpy(ifv.device1, ifname, sizeof(ifv.device1));
 	ifv.cmd = GET_VLAN_REALDEV_NAME_CMD;
-	if (ioctl(s, SIOCGIFVLAN, &ifv) == 0 && ifv.u.device2[0])
-		strlcpy(phy, ifv.u.device2, len);
+	if (ioctl(s, SIOCGIFVLAN, &ifv) == 0) {
+		if (ifv.u.device2[0])
+			strlcpy(phy, ifv.u.device2, len);
+	}
+	else if (errno == ENOPKG || errno == ENOSYS || errno == EOPNOTSUPP || errno == ENOTTY) {
+		/* no 8021q in this kernel: only a VLAN-looking name is in doubt */
+		if (!strncmp(ifname, "vlan", 4) || strchr(ifname, '.'))
+			ret = -1;
+	}
+	else if (errno != EINVAL)	/* EINVAL: an existing interface that is not a VLAN */
+		ret = -1;
 	close(s);
+	return ret;
 }
 
 /* The physical WAN port the Traffic Manager can shape, or -1 when there is
@@ -3081,7 +3093,11 @@ static int bcm_tm_wan_port(char *out, size_t len, int verbose)
 	 * own (ISP VLAN tag) is fine once mapped to that port, but on GT-BE98 and
 	 * similar RTL8372 boards the 2.5G WAN is vlan4094 on eth1, the same link
 	 * that carries the LAN switch ports - shaping it would throttle the LAN too. */
-	bcm_tm_phy_ifname(wan_ifname, out, len);
+	if (bcm_tm_phy_ifname(wan_ifname, out, len) < 0) {
+		if (verbose)
+			logmessage("qos", "%s not started: cannot tell which port WAN %s is on", mode, wan_ifname);
+		return -1;
+	}
 	if (strcmp(out, wan_ifname) && find_in_list(nvram_safe_get("lan_ifnames"), out)) {
 		if (verbose)
 			logmessage("qos", "%s not started: WAN %s runs on %s, which also carries LAN ports "
