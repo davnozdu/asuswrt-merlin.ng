@@ -25504,6 +25504,13 @@ def_boot_reinit:
 	f_write_string("/proc/sys/net/ipv6/neigh/default/gc_thresh1", "512", 0, 0);
 	f_write_string("/proc/sys/net/ipv6/neigh/default/gc_thresh2", "1024", 0, 0);
 	f_write_string("/proc/sys/net/ipv6/neigh/default/gc_thresh3", "2048", 0, 0);
+	/* reaper: CVE-2023-52340. With max_size at its 4096 default, forged ICMPv6
+	 * Packet Too Big messages can fill the IPv6 route cache (one PMTU exception
+	 * per forged destination); dst_alloc() then fails and neighbour discovery
+	 * stops, taking IPv6 down. Upstream af6d10345ca7 dropped the check and set
+	 * the default to INT_MAX; writing INT_MAX here does the same on 4.19. The GC
+	 * still runs above gc_thresh, and exception expiry bounds the memory. */
+	f_write_string("/proc/sys/net/ipv6/route/max_size", "2147483647", 0, 0);
 #endif
 
 #if defined(RTCONFIG_BWDPI) && defined(RTCONFIG_QCA) || defined(RTCONFIG_RALINK_MT7622)
