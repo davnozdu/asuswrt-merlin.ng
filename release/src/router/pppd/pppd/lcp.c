@@ -1525,11 +1525,14 @@ lcp_reqci(f, inp, lenp, reject_if_disagree)
     u_char *rejp;		/* Pointer to next char in reject frame */
     u_char *nakp;		/* Pointer to next char in Nak frame */
     int l = *lenp;		/* Length left */
+    int warned = 0;		/* reaper: CVE-2026-85495 (ppp 2.5.4) */
+    u_char seenci[256];		/* CI types already processed */
 
     /*
      * Reset all his options.
      */
     BZERO(ho, sizeof(*ho));
+    BZERO(seenci, sizeof(seenci));
 
     /*
      * Process all his options.
@@ -1554,6 +1557,24 @@ lcp_reqci(f, inp, lenp, reject_if_disagree)
 	GETCHAR(cilen, p);		/* Parse CI length */
 	l -= cilen;			/* Adjust remaining length */
 	next += cilen;			/* Step to next CI */
+
+	/*
+	 * reaper: CVE-2026-85495, ported from ppp 2.5.4. Each NAK'd option
+	 * writes into the fixed nak_buffer[PPP_MRU] with no bound, so a peer
+	 * repeating one option (301+ AUTHTYPE PAP under refuse-pap/refuse-eap)
+	 * overflowed it pre-auth. Process each CI type once (RFC 1661 forbids
+	 * repeats), and stop building a NAK once we are rejecting.
+	 */
+	if (rc == CONFREJ)
+	    nakp = nak_buffer;
+	if (seenci[citype]) {
+	    if (!warned) {
+		warn("LCP: ignoring duplicate configuration option(s)");
+		warned = 1;
+	    }
+	    continue;
+	}
+	seenci[citype] = 1;
 
 	switch (citype) {		/* Check CI type */
 	case CI_MRU:
@@ -1848,7 +1869,10 @@ endswitch:
 	    continue;			/* Don't send this one */
 
 	if (orc == CONFNAK) {		/* Nak this CI? */
-	    if (reject_if_disagree	/* Getting fed up with sending NAKs? */
+	    /* reaper: CVE-2026-85495 - never let the NAK run to the end of nak_buffer */
+	    if (nakp - nak_buffer > PPP_MRU - 8)
+		orc = CONFREJ;
+	    else if (reject_if_disagree	/* Getting fed up with sending NAKs? */
 		&& citype != CI_MAGICNUMBER) {
 		orc = CONFREJ;		/* Get tough if so */
 	    } else {
