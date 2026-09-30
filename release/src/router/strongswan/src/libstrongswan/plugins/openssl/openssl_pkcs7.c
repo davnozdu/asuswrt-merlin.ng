@@ -132,6 +132,10 @@ typedef struct {
 METHOD(enumerator_t, cert_destroy, void,
 	cert_enumerator_t *this)
 {
+	if (this->certs)
+	{
+		sk_X509_pop_free(this->certs, X509_free);
+	}
 	DESTROY_IF(this->cert);
 	free(this);
 }
@@ -222,8 +226,8 @@ static auth_cfg_t *verify_signature(CMS_SignerInfo *si,
 	auth_cfg_t *auth, *found = NULL;
 	identification_t *issuer, *serial;
 	chunk_t attrs = chunk_empty, sig, attr;
-	X509_NAME *name;
-	ASN1_INTEGER *snr;
+	X509_NAME *name = NULL;
+	ASN1_INTEGER *snr = NULL;
 	int i;
 
 	if (CMS_SignerInfo_get0_signer_id(si, NULL, &name, &snr) != 1)
@@ -628,8 +632,8 @@ static bool decrypt(private_openssl_pkcs7_t *this,
 			identification_t *serial, *issuer;
 			private_key_t *private;
 			X509_ALGOR *alg;
-			X509_NAME *name;
-			ASN1_INTEGER *sn;
+			X509_NAME *name = NULL;
+			ASN1_INTEGER *sn = NULL;
 			u_char zero = 0;
 			int oid;
 
