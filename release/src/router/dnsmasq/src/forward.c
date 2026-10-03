@@ -16,6 +16,17 @@
 
 #include "dnsmasq.h"
 
+/* reaper v3.3.3: errnos sendmsg() returns while a route or an address is in flux -
+ * the one packet is lost, the daemon is fine. ENETUNREACH: no route, or our IP_PKTINFO
+ * source address is no longer local (net/ipv4/route.c refuses a non-local fl4->saddr
+ * with ENETUNREACH; br0 while auto-WAN-port holds the WAN address on it); EHOSTUNREACH:
+ * the same at host level (an unreachable nexthop). Nothing else is transient here.
+ * libc only - host-tested by build-scripts/tests/test_dnsmasq_send_exit.py. */
+static int reaper_send_errno_transient(int e)
+{
+  return e == ENETUNREACH || e == EHOSTUNREACH;
+}
+
 static struct frec *get_new_frec(time_t now, struct server *serv, int force);
 static struct frec *lookup_frec(time_t now, char *target, int class, int rrtype, int id, int flags, int flagmask);
 #ifdef HAVE_DNSSEC
@@ -101,6 +112,28 @@ int send_from(int fd, int nowild, char *packet, size_t len,
       /* If interface is still in DAD, EINVAL results - ignore that. */
       if (errno != EINVAL)
       {
+	/* reaper v3.3.3: the exit(0) below is an ASUS addition - upstream dnsmasq
+	 * logs and returns 0. It fired on every RT-BE96U boot and WAN re-home:
+	 * auto-WAN-port briefly bridges eth0 into br0 and swaps br0's address, our
+	 * IP_PKTINFO source is no longer local, the kernel's route lookup answers
+	 * ENETUNREACH, and the LAN instance exited - no LAN DNS or DHCP until the
+	 * watchdog respawned it ~20 s later. The conf uses bind-dynamic, so the
+	 * address is re-tracked without a restart: for the transient routing
+	 * errnos log (at most once per 10 s) and drop the one reply; every other
+	 * errno keeps the ASUS exit. */
+	if (reaper_send_errno_transient(errno))
+	  {
+	    static time_t reaper_last_warn = 0;
+	    int e = errno;
+	    time_t now = dnsmasq_time();
+
+	    if (reaper_last_warn == 0 || now - reaper_last_warn >= 10)
+	      {
+		reaper_last_warn = now;
+		my_syslog(LOG_WARNING, _("failed to send packet: %s - transient, reply dropped, not exiting"), strerror(e));
+	      }
+	    return 0;
+	  }
 	my_syslog(LOG_ERR, _("failed to send packet: %s"), strerror(errno));
 	exit(0);
       }
