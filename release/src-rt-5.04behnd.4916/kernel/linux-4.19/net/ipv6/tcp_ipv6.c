@@ -1270,6 +1270,46 @@ static void tcp_v6_restore_cb(struct sk_buff *skb)
 }
 
 #if !defined(CONFIG_BCM_KF_MPTCP) || !defined(CONFIG_BCM_MPTCP)
+/* CVE-2026-43198 (upstream 858d2a4f67ff "tcp: fix potential race in
+ * tcp_v6_syn_recv_sock()"). Called from __tcp_v4_syn_recv_sock() for a
+ * v6-mapped child BEFORE it is hashed. This used to run after
+ * tcp_v4_syn_recv_sock() returned, when the child was already visible in the
+ * established hash with pinet6 still pointing at the listener's ipv6_pinfo.
+ */
+static void tcp_v6_mapped_child_init(struct sock *newsk, const struct sock *sk)
+{
+	struct tcp6_sock *newtcp6sk = (struct tcp6_sock *)newsk;
+	const struct ipv6_pinfo *np = inet6_sk(sk);
+	struct inet_sock *newinet = inet_sk(newsk);
+	struct ipv6_pinfo *newnp;
+
+	newinet->pinet6 = newnp = &newtcp6sk->inet6;
+
+	memcpy(newnp, np, sizeof(struct ipv6_pinfo));
+
+	newnp->saddr = newsk->sk_v6_rcv_saddr;
+
+	inet_csk(newsk)->icsk_af_ops = &ipv6_mapped;
+	newsk->sk_backlog_rcv = tcp_v4_do_rcv;
+#ifdef CONFIG_TCP_MD5SIG
+	tcp_sk(newsk)->af_specific = &tcp_sock_ipv6_mapped_specific;
+#endif
+
+	newnp->ipv6_mc_list = NULL;
+	newnp->ipv6_ac_list = NULL;
+	newnp->ipv6_fl_list = NULL;
+	newnp->pktoptions  = NULL;
+	newnp->opt	   = NULL;
+
+	/* __tcp_v4_syn_recv_sock() has set newinet->mc_{index,ttl} from the skb */
+	newnp->mcast_oif   = newinet->mc_index;
+	newnp->mcast_hops  = newinet->mc_ttl;
+
+	newnp->rcv_flowinfo = 0;
+	if (np->repflow)
+		newnp->flow_label = 0;
+}
+
 static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 					 struct request_sock *req,
 					 struct dst_entry *dst,
@@ -1298,8 +1338,21 @@ struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	struct flowi6 fl6;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+#if !defined(CONFIG_BCM_KF_MPTCP) || !defined(CONFIG_BCM_MPTCP)
 		/*
-		 *	v6 mapped
+		 *	v6 mapped: the child is finished by tcp_v6_mapped_child_init()
+		 *	before it is hashed (CVE-2026-43198). Its tcp_sync_mss() in
+		 *	__tcp_v4_syn_recv_sock() then already runs with the ipv6_mapped
+		 *	ops, so the second sync that used to follow here is gone.
+		 */
+		return __tcp_v4_syn_recv_sock(sk, skb, req, dst,
+					      req_unhash, own_req,
+					      tcp_v6_mapped_child_init);
+#else
+		/*
+		 *	v6 mapped (Broadcom MPTCP build, not enabled on any Reaper
+		 *	model: the mapped ops depend on the request's saw_mpc, which
+		 *	the child-init hook does not see - left as shipped)
 		 */
 
 		newsk = tcp_v4_syn_recv_sock(sk, skb, req, dst,
@@ -1361,6 +1414,7 @@ struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 		tcp_sync_mss(newsk, inet_csk(newsk)->icsk_pmtu_cookie);
 
 		return newsk;
+#endif
 	}
 
 	ireq = inet_rsk(req);

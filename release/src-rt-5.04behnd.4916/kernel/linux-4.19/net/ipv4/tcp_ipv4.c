@@ -1554,12 +1554,19 @@ EXPORT_SYMBOL(tcp_v4_conn_request);
 /*
  * The three way handshake has completed - we got a valid synack -
  * now create the new socket.
+ *
+ * opt_child_init (CVE-2026-43198): tcp_v6_syn_recv_sock() passes a hook for a
+ * v6-mapped child. It runs before the child is synced and hashed - once
+ * inet_ehash_nolisten() publishes it, other CPUs can use it, and its pinet6
+ * must no longer point at the listener's ipv6_pinfo.
  */
-struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
-				  struct request_sock *req,
-				  struct dst_entry *dst,
-				  struct request_sock *req_unhash,
-				  bool *own_req)
+struct sock *__tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
+				    struct request_sock *req,
+				    struct dst_entry *dst,
+				    struct request_sock *req_unhash,
+				    bool *own_req,
+				    void (*opt_child_init)(struct sock *newsk,
+							   const struct sock *sk))
 {
 	struct inet_request_sock *ireq;
 	bool found_dup_sk = false;
@@ -1607,6 +1614,10 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	}
 	sk_setup_caps(newsk, dst);
 
+#if IS_ENABLED(CONFIG_IPV6)
+	if (opt_child_init)
+		opt_child_init(newsk, sk);
+#endif
 	tcp_ca_openreq_child(newsk, dst);
 
 	tcp_sync_mss(newsk, dst_mtu(dst));
@@ -1664,6 +1675,17 @@ put_and_exit:
 	inet_csk_prepare_forced_close(newsk);
 	tcp_done(newsk);
 	goto exit;
+}
+EXPORT_SYMBOL(__tcp_v4_syn_recv_sock);
+
+struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
+				  struct request_sock *req,
+				  struct dst_entry *dst,
+				  struct request_sock *req_unhash,
+				  bool *own_req)
+{
+	return __tcp_v4_syn_recv_sock(sk, skb, req, dst, req_unhash, own_req,
+				      NULL);
 }
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
 

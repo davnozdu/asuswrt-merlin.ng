@@ -565,6 +565,18 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 				  struct dst_entry *dst,
 				  struct request_sock *req_unhash,
 				  bool *own_req);
+/* CVE-2026-43198 (upstream 858d2a4f67ff): tcp_v4_syn_recv_sock() with a hook
+ * that finishes a v6-mapped child before it is hashed. Kept separate so the
+ * exported six-argument tcp_v4_syn_recv_sock() and the af_ops signature stay
+ * as they were for any out-of-tree caller.
+ */
+struct sock *__tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
+				    struct request_sock *req,
+				    struct dst_entry *dst,
+				    struct request_sock *req_unhash,
+				    bool *own_req,
+				    void (*opt_child_init)(struct sock *newsk,
+							   const struct sock *sk));
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb);
 int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int tcp_connect(struct sock *sk);
