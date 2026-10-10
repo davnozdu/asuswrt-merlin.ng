@@ -25180,7 +25180,18 @@ static void sysinit(void)
 	f_write("/etc/fstab", NULL, 0, 0, 0644);			// !!TB - blank
 	f_write("/tmp/settings", NULL, 0, 0, 0644);
 
-	//umask(022);
+	/* reaper 2026-10-09 (field report, GT-BE98): ASUS's own line, switched on.
+	 * Every process rc starts inherits rc's umask, and with 0 any file created
+	 * without an explicit mode (fopen "w", a shell ">") was 0666 - writable by
+	 * the non-root services (dnsmasq and tftpd as nobody, Entware daemons)
+	 * before root read it back. Placed here, after the directory block above,
+	 * so each directory ASUS made 0777 on purpose (/var/lock, /var/state,
+	 * /var/tmp/dhcp; /tmp is 01777) keeps exactly its stock mode. The services
+	 * that must create files as another user set their own: vsftpd
+	 * local_umask=000, Samba force create/directory mode 0777, tftpd's -U
+	 * default, mkdir_if_none's "mkdir -m 0777". chmod() ignores the umask, so
+	 * every explicit chmod in rc is unchanged. test_rc_umask.py */
+	umask(022);
 
 	if ((d = opendir("/rom/etc")) != NULL) {
 		while ((de = readdir(d)) != NULL) {
