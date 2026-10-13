@@ -684,7 +684,7 @@ EXPORT_SYMBOL(inet_rtx_syn_ack);
 
 /* return true if req was found in the ehash table */
 static bool reqsk_queue_unlink(struct request_sock_queue *queue,
-			       struct request_sock *req)
+			       struct request_sock *req, bool from_timer)
 {
 	struct inet_hashinfo *hashinfo = req_to_sk(req)->sk_prot->h.hashinfo;
 	bool found = false;
@@ -699,21 +699,34 @@ static bool reqsk_queue_unlink(struct request_sock_queue *queue,
 	/* The timer may already have been dequeued for a running handler, so
 	 * timer_pending() can read false while reqsk_timer_handler() still
 	 * uses req; only del_timer_sync() waits for it (CVE-2024-50154).
+	 * reqsk_timer_handler() itself also lands here, from its drop path, and
+	 * del_timer_sync() on the timer that is running spins forever
+	 * (try_to_del_timer_sync() returns -1 while base->running_timer is this
+	 * timer) - a CPU stuck in softirq. The handler passes from_timer and its
+	 * own reference is put by the caller, as upstream e8c526f2bdf1 does.
 	 */
-	if (del_timer_sync(&req->rsk_timer))
+	if (!from_timer && del_timer_sync(&req->rsk_timer))
 		reqsk_put(req);
 	return found;
 }
 
-bool inet_csk_reqsk_queue_drop(struct sock *sk, struct request_sock *req)
+static bool __inet_csk_reqsk_queue_drop(struct sock *sk,
+					struct request_sock *req,
+					bool from_timer)
 {
-	bool unlinked = reqsk_queue_unlink(&inet_csk(sk)->icsk_accept_queue, req);
+	bool unlinked = reqsk_queue_unlink(&inet_csk(sk)->icsk_accept_queue,
+					   req, from_timer);
 
 	if (unlinked) {
 		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
 		reqsk_put(req);
 	}
 	return unlinked;
+}
+
+bool inet_csk_reqsk_queue_drop(struct sock *sk, struct request_sock *req)
+{
+	return __inet_csk_reqsk_queue_drop(sk, req, false);
 }
 EXPORT_SYMBOL(inet_csk_reqsk_queue_drop);
 
@@ -794,7 +807,8 @@ static void reqsk_timer_handler(struct timer_list *t)
 		return;
 	}
 drop:
-	inet_csk_reqsk_queue_drop_and_put(sk_listener, req);
+	__inet_csk_reqsk_queue_drop(sk_listener, req, true);
+	reqsk_put(req);
 }
 
 static void reqsk_queue_hash_req(struct request_sock *req,
