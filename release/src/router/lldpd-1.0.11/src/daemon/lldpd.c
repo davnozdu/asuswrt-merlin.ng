@@ -562,7 +562,10 @@ lldpd_decode(struct lldpd *cfg, char *frame, int s,
 	if (eheader.ether_type == htons(ETHERTYPE_VLAN)) {
 		/* VLAN decapsulation means to shift 4 bytes left the frame from
 		 * offset 2*ETHER_ADDR_LEN */
-		memmove(frame + 2*ETHER_ADDR_LEN, frame + 2*ETHER_ADDR_LEN + 4, s - 2*ETHER_ADDR_LEN);
+		/* reaper 2026-10-13 (CVE-2026-46433): the tag is four bytes, so the data
+		 * that moves is s - 12 - 4 bytes, not s - 12: the old count read four
+		 * bytes past a frame that filled its h_mtu buffer (upstream lldpd 1.0.22). */
+		memmove(frame + 2*ETHER_ADDR_LEN, frame + 2*ETHER_ADDR_LEN + 4, s - 2*ETHER_ADDR_LEN - 4);
 		s -= 4;
 	}
 
