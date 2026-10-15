@@ -226,10 +226,21 @@ void accounting_sta_start(struct hostapd_data *hapd, struct sta_info *sta)
 	if (sta->acct_session_started)
 		return;
 
-	hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_RADIUS,
-		       HOSTAPD_LEVEL_INFO,
-		       "starting accounting session %016llX",
-		       (unsigned long long) sta->acct_session_id);
+	/* reaper 2026-10-15: stock logged this at INFO for every authorized client
+	 * before the acct_server test below, so a box with no RADIUS configured put
+	 * "RADIUS: starting accounting session" in syslog on each connection (nothing
+	 * was sent). With a server: unchanged. Without one: debug level, worded for
+	 * what it is (the start time and the per-client counters below). */
+	if (hapd->conf->radius->acct_server)
+		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_RADIUS,
+			       HOSTAPD_LEVEL_INFO,
+			       "starting accounting session %016llX",
+			       (unsigned long long) sta->acct_session_id);
+	else
+		hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_RADIUS,
+			       HOSTAPD_LEVEL_DEBUG,
+			       "local session %016llX started (no accounting server)",
+			       (unsigned long long) sta->acct_session_id);
 
 	os_get_reltime(&sta->acct_session_start);
 	sta->last_rx_bytes_hi = 0;
