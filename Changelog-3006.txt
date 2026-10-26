@@ -1,7 +1,7 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
-3006.102.8_beta4-dav27 (unreleased)
+3006.102.8_beta4-dav27 (26-Oct-2026)
  - IMPROVED: Spatial Reuse auto-tune no longer writes nvram to flash or
          touches the Wi-Fi driver every 15 minutes when nothing changes; it
          raises the OBSS-PD level only on a sustained reading, checks the
