@@ -37,6 +37,9 @@ Asuswrt-Merlin 3006.xxx Changelog
          lldpd (CVE-2026-46433), e2fsprogs (CVE-2022-1304) (after AM-Reaper).
  - CHANGED: rc runs with umask 022, so files services create are no
          longer world-writable (after AM-Reaper).
+ - SECURITY: SSH opened to the WAN over IPv6 is now rate-limited: the
+         6th new connection from one /64 within 60 s is dropped.  The
+         brute-force protection only covered IPv4 (after AM-Reaper).
 
 3006.102.8_beta4-dav26 (25-Sep-2026)
  - CHANGED: the ASUS cloud services are no longer built: Alexa and Google

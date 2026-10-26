@@ -4577,6 +4577,21 @@ static void _config_mtwan_mangle_rules(
 #endif	//RTCONFIG_MULTIWAN_PROFILE
 #endif	//RTCONFIG_MULTIWAN_IF
 
+#if defined(RTCONFIG_SSH) && defined(RTCONFIG_IPV6)
+/* SSH open to the WAN over IPv6 is a plain accept; the brute-force protection
+ * only covers IPv4.  Drop the 6th new connection from one /64 within 60 s;
+ * --update keeps a continuing flood blocked.  LAN and established traffic
+ * are accepted earlier in INPUT, so only new WAN connections get here.
+ * (from AM-Reaper) */
+static void ssh6_bfp_rules(FILE *fp_ipv6, int port, const char *logdrop)
+{
+	fprintf(fp_ipv6, "-A INPUT -p tcp -m tcp --dport %d -m state --state NEW -m recent --name ssh6_bfp "
+		"--mask ffff:ffff:ffff:ffff:: --update --seconds 60 --hitcount 5 -j %s\n", port, logdrop);
+	fprintf(fp_ipv6, "-A INPUT -p tcp -m tcp --dport %d -m state --state NEW -m recent --name ssh6_bfp "
+		"--mask ffff:ffff:ffff:ffff:: --set\n", port);
+}
+#endif
+
 void
 filter_setting(int wan_unit, char *lan_if, char *lan_ip, char *logaccept, char *logdrop)
 {
@@ -5247,9 +5262,11 @@ TRACE_PT("writing Parental Control\n");
 			fprintf(fp, "-A INPUT -p tcp -m tcp --dport %d -j %s\n",
 				nvram_get_int("sshd_port") ? : 22, logaccept);
 #ifdef RTCONFIG_IPV6
-			if (ipv6_enabled() && nvram_match("ipv6_fw_enable", "1"))
+			if (ipv6_enabled() && nvram_match("ipv6_fw_enable", "1")) {
+				ssh6_bfp_rules(fp_ipv6, nvram_get_int("sshd_port") ? : 22, logdrop);
 				fprintf(fp_ipv6, "-A INPUT -p tcp -m tcp --dport %d -j %s\n",
 					nvram_get_int("sshd_port") ? : 22, logaccept);
+			}
 #endif
 		}
 #endif
@@ -7060,9 +7077,11 @@ TRACE_PT("writing Parental Control\n");
 			fprintf(fp, "-A INPUT -p tcp -m tcp --dport %d -j %s\n",
 				nvram_get_int("sshd_port") ? : 22, logaccept);
 #ifdef RTCONFIG_IPV6
-			if (ipv6_enabled() && nvram_match("ipv6_fw_enable", "1"))
+			if (ipv6_enabled() && nvram_match("ipv6_fw_enable", "1")) {
+				ssh6_bfp_rules(fp_ipv6, nvram_get_int("sshd_port") ? : 22, logdrop);
 				fprintf(fp_ipv6, "-A INPUT -p tcp -m tcp --dport %d -j %s\n",
 					nvram_get_int("sshd_port") ? : 22, logaccept);
+			}
 #endif
 		}
 #endif
