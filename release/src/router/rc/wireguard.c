@@ -1610,12 +1610,11 @@ void stop_wgs(int unit)
 #endif
 	_wg_x_nf_del(ifname);
 
-	/// delete priority rule
+	/// delete priority rule (reaper 2026-10-24, B-WGS-3: every peer, not only the enabled ones - the helper works
+	/// from the saved route file and is a no-op for a peer that never had one)
 	for (c_unit = 1; c_unit <= WG_SERVER_CLIENT_MAX; c_unit++)
 	{
 		snprintf(c_prefix, sizeof(c_prefix), "%sc%d_", prefix, c_unit);
-		if (nvram_pf_get_int(c_prefix, "enable") == 0)
-			continue;
 		_wg_server_ip_rule_del(c_prefix);
 	}
 
@@ -1937,6 +1936,13 @@ void update_wgs_client(int s_unit, int c_unit)
 		// client conf
 		_wg_server_gen_client_conf(s_prefix, c_prefix, c_path);
 		eval("qrencode", "-r", c_path, "-o", cp_path);
+	}
+	else
+	{
+		/* reaper 2026-10-24 (VPN wave, B-WGS-3): a peer switched off kept its "ip rule to <aips> lookup main"
+		   until reboot (nothing deleted it here, and stop_wgs / reload_wgs_ip_rule skip disabled peers). The
+		   helper reads the saved route file, so it runs before the route update rewrites that file. */
+		_wg_server_ip_rule_del(c_prefix);
 	}
 
 	// route update

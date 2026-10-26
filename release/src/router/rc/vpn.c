@@ -277,8 +277,10 @@ void start_pptpd(void)
 	fprintf(fp, "localip %s\n"
 		"remoteip %s\n", lanip,
 		nvram_safe_get("pptpd_clients"));
-	if (nvram_invmatch("pptpd_broadcast", "") &&
-	    nvram_invmatch("pptpd_broadcast", "disable")) {
+	/* reaper 2026-10-24 (VPN wave, B-PPTP-1): the setting is 0 / 1 (defaults.c "0"; the stock page, the ASUS app
+	   and Reaper_VPNServer all write it so), yet this test started bcrelay for every value except "" and
+	   "disable" - the default "0" included. "enable" is honoured for a hand-set legacy value. */
+	if (nvram_get_int("pptpd_broadcast") || nvram_match("pptpd_broadcast", "enable")) {
 		fprintf(fp, "bcrelay %s,%s\n",
 			lan_ifname, "pptp[0-9]+");
 	}

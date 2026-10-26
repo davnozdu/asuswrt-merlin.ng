@@ -1139,6 +1139,10 @@ void config_daytime_string(pc_s *pc_list, FILE *fp, char *lan_if, char *logaccep
 	for(follow_pc = enabled_list; follow_pc != NULL; follow_pc = follow_pc->next){
 		const char *chk_type;
 		char follow_addr[18] = {0};
+		/* Reaper 2026-10-24: per device. Set once before this loop, the verdict of the previous device's last
+		   rule leaked into the next one: a device with no switched-on window listed after an allow-only (M)
+		   device got that device's tail DROP and lost the Internet around the clock. */
+		fftype = logdrop;
 #ifdef RTCONFIG_AMAS
 		_dprintf("config_daytime_string\n");
 		if (strlen(follow_pc->mac) && amas_lib_device_ip_query(follow_pc->mac, lan_if, follow_addr)) {
