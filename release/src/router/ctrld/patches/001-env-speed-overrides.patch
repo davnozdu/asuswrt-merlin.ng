@@ -1,8 +1,8 @@
 diff --git a/cmd/cli/cli.go b/cmd/cli/cli.go
-index 4183518..ada0be0 100644
+index edd5837..4550295 100644
 --- a/cmd/cli/cli.go
 +++ b/cmd/cli/cli.go
-@@ -1133,9 +1133,38 @@ func processLogAndCacheFlags(v *viper.Viper, cfg *ctrld.Config) {
+@@ -1305,9 +1305,38 @@ func processLogAndCacheFlags(v *viper.Viper, cfg *ctrld.Config) {
  		cfg.Service.CacheEnable = true
  		cfg.Service.CacheSize = cacheSize
  	}

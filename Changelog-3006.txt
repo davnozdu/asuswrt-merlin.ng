@@ -1,6 +1,24 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav28 (06-Nov-2026)
+ - UPDATED: GT-BE98 Wi-Fi, Ethernet, switch and RDPA prebuilts from
+         ASUS GPL 102_40585, as imported by Gnuton. wl.o and BCM6726
+         radio firmware are built 19-Oct-2026; driver version remains
+         17.10.369.39012. Kept our newer BCM6717 firmware from May 2026.
+ - UPDATED: the matching Wi-Fi authentication, channel-selection and
+         configuration components, plus WLAN startup-script fixes.
+ - FIXED: dependencies of the new NVRAM and policy libraries: the native
+         check_allow_nvram_caller implementation, matching policy-table
+         ABI and boot initialization, NetBIOS validation and Ookla helper.
+         Other models retain their existing policy ABI.
+ - UPDATED: ctrld 1.5.9 in the slim build, with our cache/discovery env
+         overrides retained and tested across configuration reloads.
+         Includes upstream bootstrap, network-recovery and API-maintenance
+         fixes. The committed ARM64 binary is also patched.
+ - CHANGED: slim CI now requires the patched ctrld build and its tests;
+         a failed build no longer silently falls back to an old stock binary.
+
 3006.102.8_beta4-dav27 (26-Oct-2026)
  - IMPROVED: Spatial Reuse auto-tune no longer writes nvram to flash or
          touches the Wi-Fi driver every 15 minutes when nothing changes; it

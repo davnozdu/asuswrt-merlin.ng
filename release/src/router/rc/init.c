@@ -24188,6 +24188,12 @@ int init_nvram2(void)
 
 	detect_vul_scan();
 
+#if defined(GTBE98)
+	/* Initialize the policy state expected by the GPL 102_40585 libraries,
+	 * including fresh NVRAM after a factory reset. */
+	init_asus_pp_eula();
+#endif
+
 	return 0;
 }  // end of init_nvram2
 

@@ -64,37 +64,33 @@ jobs:
           run: |
             cd ${PROJECT_DIR}
             DEST="${PROJECT_DIR}/release/src/router/ctrld/prebuilt/ctrld"
-            # Build ctrld from source (pinned tag) with our speed patch on top:
-            # in --cd mode ctrld discards any local config, so cache_serve_stale /
-            # discovery toggles can only be injected via env vars added by
-            # release/src/router/ctrld/patches/. A stock binary silently ignores
-            # those env vars, so falling back to the committed blob is safe.
-            CTRLD_TAG="v1.5.8"
-            GO_VER="1.25.0"
-            set +e
-            (
-              set -e
-              curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" -o /tmp/go.tgz
-              tar -C /tmp -xzf /tmp/go.tgz
-              curl -fsSL "https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz" -o /tmp/upx.txz
-              tar -C /tmp -xJf /tmp/upx.txz
-              git clone --depth 1 --branch "${CTRLD_TAG}" https://github.com/Control-D-Inc/ctrld /tmp/ctrld-src
-              cd /tmp/ctrld-src
-              for p in ${PROJECT_DIR}/release/src/router/ctrld/patches/*.patch; do
-                  echo "Applying $(basename $p)"
-                  git apply -v "$p"
-              done
-              COMMIT=$(git rev-parse HEAD)
-              export PATH="/tmp/go/bin:$PATH" GOTOOLCHAIN=auto CGO_ENABLED=0 GOOS=linux GOARCH=arm64
-              go build -trimpath -ldflags "-s -w -X main.version=${CTRLD_TAG#v} -X main.commit=${COMMIT}" -o /tmp/ctrld-bin ./cmd/ctrld
-              /tmp/upx-4.2.4-amd64_linux/upx --best --lzma -q /tmp/ctrld-bin
-              install -m 755 /tmp/ctrld-bin "${DEST}"
-            )
-            if [ $? -eq 0 ]; then
-                echo "ctrld ${CTRLD_TAG} built from source with speed patch:"; ls -l "${DEST}"
-            else
-                echo "WARN: source build failed; keeping committed stock blob"; ls -l "${DEST}" || true
-            fi
+            # Require our patched build: a stock binary ignores the firmware's
+            # cache/discovery overrides in --cd mode.
+            CTRLD_TAG="v1.5.9"
+            CTRLD_COMMIT="df5104dff15574f71dc08642343846d0c89ea41f"
+            GO_VER="1.26.10"
+            set -e
+            curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" -o /tmp/go.tgz
+            tar -C /tmp -xzf /tmp/go.tgz
+            curl -fsSL "https://github.com/upx/upx/releases/download/v5.2.0/upx-5.2.0-amd64_linux.tar.xz" -o /tmp/upx.txz
+            tar -C /tmp -xJf /tmp/upx.txz
+            git clone --depth 1 --branch "${CTRLD_TAG}" https://github.com/Control-D-Inc/ctrld /tmp/ctrld-src
+            cd /tmp/ctrld-src
+            COMMIT=$(git rev-parse HEAD)
+            test "${COMMIT}" = "${CTRLD_COMMIT}"
+            for p in ${PROJECT_DIR}/release/src/router/ctrld/patches/*.patch; do
+                echo "Applying $(basename "$p")"
+                git apply --check "$p"
+                git apply "$p"
+            done
+            export PATH="/tmp/go/bin:$PATH" GOTOOLCHAIN=local CGO_ENABLED=0
+            go test ./cmd/cli -run '^TestRouterEnvOverrides' -count=1
+            GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${CTRLD_TAG#v} -X main.commit=${COMMIT}" -o /tmp/ctrld-bin ./cmd/ctrld
+            /tmp/upx-5.2.0-amd64_linux/upx --best --lzma -q /tmp/ctrld-bin
+            /tmp/upx-5.2.0-amd64_linux/upx -t /tmp/ctrld-bin
+            install -m 755 /tmp/ctrld-bin "${DEST}"
+            echo "ctrld ${CTRLD_TAG} built from source with speed patch:"
+            ls -l "${DEST}"
         - name: "Set version"
           if: matrix.cfg.skip == false
           run: |

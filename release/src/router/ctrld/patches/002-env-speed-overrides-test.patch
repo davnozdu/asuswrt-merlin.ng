@@ -1,0 +1,62 @@
+diff --git a/cmd/cli/router_env_test.go b/cmd/cli/router_env_test.go
+new file mode 100644
+index 0000000..b9fc627
+--- /dev/null
++++ b/cmd/cli/router_env_test.go
+@@ -0,0 +1,56 @@
++package cli
++
++import (
++	"github.com/Control-D-Inc/ctrld"
++	"github.com/spf13/viper"
++	"github.com/stretchr/testify/require"
++	"testing"
++)
++
++func TestRouterEnvOverridesSurviveConfigReload(t *testing.T) {
++	t.Setenv("CTRLD_CACHE_SERVE_STALE", "1")
++	t.Setenv("CTRLD_CACHE_TTL_OVERRIDE", "60")
++	t.Setenv("CTRLD_DISCOVERY_OFF", "1")
++	t.Setenv("CTRLD_MAX_CONCURRENT", "256")
++	for _, phase := range []string{"initial-api-config", "reloaded-api-config"} {
++		t.Run(phase, func(t *testing.T) {
++			config := &ctrld.Config{}
++			values := viper.New()
++			processLogAndCacheFlags(values, config)
++			require.True(t, config.Service.CacheServeStale)
++			require.Equal(t, 60, config.Service.CacheTTLOverride)
++			require.NotNil(t, config.Service.MaxConcurrentRequests)
++			require.Equal(t, 256, *config.Service.MaxConcurrentRequests)
++			for _, enabled := range []*bool{config.Service.DiscoverMDNS, config.Service.DiscoverARP, config.Service.DiscoverDHCP, config.Service.DiscoverPtr, config.Service.DiscoverHosts} {
++				require.NotNil(t, enabled)
++				require.False(t, *enabled)
++			}
++			saved := values.Get("service").(ctrld.ServiceConfig)
++			require.True(t, saved.CacheServeStale)
++			require.Equal(t, 60, saved.CacheTTLOverride)
++		})
++	}
++}
++
++func TestRouterEnvOverridesIgnoreInvalidValues(t *testing.T) {
++	for _, invalid := range []string{"", "0", "-1", "invalid"} {
++		t.Run(invalid, func(t *testing.T) {
++			t.Setenv("CTRLD_CACHE_SERVE_STALE", "0")
++			t.Setenv("CTRLD_DISCOVERY_OFF", "0")
++			t.Setenv("CTRLD_CACHE_TTL_OVERRIDE", invalid)
++			t.Setenv("CTRLD_MAX_CONCURRENT", invalid)
++			concurrent := 32
++			on := true
++			config := &ctrld.Config{Service: ctrld.ServiceConfig{
++				CacheTTLOverride:      120,
++				MaxConcurrentRequests: &concurrent,
++				DiscoverMDNS:          &on,
++			}}
++			processLogAndCacheFlags(viper.New(), config)
++			require.False(t, config.Service.CacheServeStale)
++			require.Equal(t, 120, config.Service.CacheTTLOverride)
++			require.Equal(t, 32, *config.Service.MaxConcurrentRequests)
++			require.True(t, *config.Service.DiscoverMDNS)
++		})
++	}
++}

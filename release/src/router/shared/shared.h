@@ -3960,6 +3960,9 @@ extern int isValidEnableOption(const char* option, int range);
 extern int isValid_digit_string(const char *string);
 extern int is_valid_hostname(const char *name);
 extern int is_valid_domainname(const char *name);
+#if defined(GTBE98)
+extern int is_valid_netbios_name(const char *name);
+#endif
 extern char *get_ddns_hostname(void);
 extern int get_ispctrl();
 extern unsigned short get_extend_cap();
@@ -5758,6 +5761,9 @@ enum{
 	ASUS_PP_CONFIG_TRANSFER = 5,
 	ASUS_PP_DDNS = 6,
 	ASUS_PP_AFC = 7,
+#if defined(GTBE98)
+	ASUS_PP_LICENSE_UPDATE_V5 = 8,
+#endif
 	ASUS_PP_MAX
 };
 
@@ -5765,6 +5771,10 @@ struct ASUS_PP_table {
 	char *name;
 	char *version;
 	int id;
+#if defined(GTBE98)
+	/* ABI of spwenc.o and priv_webapi.o from GT-BE98 GPL 102_40585. */
+	int force_sign;
+#endif
 };
 extern struct ASUS_PP_table ASUS_PP_t[];
 
@@ -5772,6 +5782,9 @@ extern int webapi_get_b(const int id, char *buf, size_t len);
 extern int get_ASUS_privacy_policy_state(const int id);
 extern int get_ASUS_privacy_policy(void);
 extern int get_ASUS_privacy_policy_ver(const int id);
+#if defined(GTBE98)
+extern void init_asus_pp_eula(void);
+#endif
 
 extern int adjust_62_nv_list(char *name);
 

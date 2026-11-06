@@ -1,6 +1,10 @@
-VERSION 1.5.5
-linux_arm64 from github.com/Control-D-Inc/ctrld releases
-NOTE: this committed blob is the STOCK binary, kept only as a CI fallback.
-The workflow rebuilds ctrld from source (pinned v1.5.8) with the patches in
-../patches/ (env-var speed overrides for --cd mode) and replaces this file
-in the build tree before the firmware image is packed.
+VERSION 1.5.9
+linux_arm64, CGO_ENABLED=0, built with Go 1.26.10; packed with UPX 5.2.0.
+Upstream: Control-D-Inc/ctrld v1.5.9
+Commit: df5104dff15574f71dc08642343846d0c89ea41f
+Patched: ../patches/001-env-speed-overrides.patch
+Tests: ../patches/002-env-speed-overrides-test.patch
+This committed binary includes the cache/discovery environment overrides.
+CI rebuilds the same pinned source, applies both patches, runs the override
+tests, then cross-compiles and packs the ARM64 binary. Any failure stops CI.
+SHA256 8206c1532460b163d59f375f6beec31395b9592bf9978144e52119dc6ae2bb04

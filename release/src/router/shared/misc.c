@@ -6205,6 +6205,34 @@ int is_valid_domainname(const char *name)
 	return p - name;
 }
 
+#if defined(GTBE98)
+/* Shared-library export required by the GPL 102_40585 priv_webapi.o.
+ * write_smb_conf has its own copy, which is not part of libdisk.so. */
+int is_valid_netbios_name(const char *name)
+{
+	int valid = 1;
+	size_t i, len;
+
+	if (!name)
+		return 0;
+
+	len = strlen(name);
+	if (!len || len > 15)
+		return 0;
+
+	for (i = 0; valid && i < len; ++i) {
+		if (isalnum((unsigned char)name[i]))
+			continue;
+		else if ((name[i] == '-' || name[i] == '.') &&
+			 (i > 0 && i < (len - 1)))
+			continue;
+		valid = 0;
+	}
+
+	return valid;
+}
+#endif
+
 int get_discovery_ssid(char *ssid_g, int size)
 {
 #if defined(RTCONFIG_WIRELESSREPEATER) || defined(RTCONFIG_PROXYSTA)

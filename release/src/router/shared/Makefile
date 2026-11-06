@@ -233,6 +233,10 @@ ifeq ($(RTCONFIG_RGBLED),y)
 OBJS += $(if $(wildcard aura_rgb.c),aura_rgb.o,prebuild/aura_rgb.o)
 endif
 OBJS += timer_utils.o
+ifeq ($(BUILD_NAME),GT-BE98)
+# GPL 102_40585 priv_webapi.o imports this even in builds without OOKLA.
+OBJS += ookla_utils.o
+endif
 ifeq ($(RTCONFIG_TRAFFIC_LIMITER),y)
 OBJS += tld_utils.o
 endif
