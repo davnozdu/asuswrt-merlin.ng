@@ -15,6 +15,7 @@ CFLAGS += -DBCM49XX
 endif
 endif
 CFLAGS += -Wall $(if $(RTCONFIG_DEBUG),-g,-Os) $(EXTRACFLAGS)
+# review 2026-11-03 (F-4): position-independent, full RELRO for rc's own objects (the shared libraries built here keep -fPIC); NO FORTIFY: an abort in PID 1 is a panic
 CFLAGS += -I. -I$(TOP)/shared -I$(SRCBASE)/include -I$(TOP)/networkmap
 ifneq ($(HND_ROUTER),y)
 CFLAGS += -idirafter$(LINUXDIR)/include
@@ -1306,9 +1307,11 @@ $(WPS_PBCD): $(OBJS_WPS_PBCD)
 	@$(CC) -o $@ $(OBJS_WPS_PBCD) $(LDFLAGS)
 endif
 
+$(OBJS): CFLAGS += -fPIE
+
 rc: $(OBJS) $(if $(RTCONFIG_CONNDIAG),libconn_diag.so,) $(if $(RTCONFIG_ENERGY_SAVE),libes.so,) $(if $(RTCONFIG_BCM_AFC),libbcm_afc.so,)
 	@echo " [rc] CC $@"
-	@$(CC) -o $@ $^ $(LDFLAGS2) $(CFLAGS)
+	@$(CC) -o $@ $^ $(LDFLAGS2) $(CFLAGS) -pie -Wl,-z,relro,-z,now
 
 	$(SIZECHECK)
 	$(CPTMP)

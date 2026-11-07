@@ -402,7 +402,16 @@ int main(int argc, char *argv[])
 	fprintf(fp, "printing = bsd\n");
 	fprintf(fp, "printcap name = /dev/null\n");
 	fprintf(fp, "log file = %s\n", SAMBA_LOG);
+#if defined(RTCONFIG_SAMBA4)
+	/* reaper 2026-11-03 (owner: a wrong SMB password left no trace): Samba logs authentication in the auth_audit
+	 * class, a refusal at level 2 and a success at 3 (auth/auth_log.c). Raise that class to 2 and send levels
+	 * 0..2 to syslog: every refused login is in the system log with the user, the client address and the reason;
+	 * successful logins and everything else stay at level 0 as before. `logging` replaces the deprecated `syslog`. */
+	fprintf(fp, "log level = 0 auth_audit:2\n");
+	fprintf(fp, "logging = syslog@2 file\n");
+#else
 	fprintf(fp, "log level = 0\n");
+#endif
 	fprintf(fp, "max log size = 5\n");
 
 	// account mode
@@ -473,6 +482,10 @@ int main(int argc, char *argv[])
 	fprintf(fp, "client use spnego = no\n");	// ASUS add
 //	fprintf(fp, "client use spnego = yes\n");	// ASUS add
 	fprintf(fp, "disable spoolss = yes\n");		// ASUS add
+#if defined(RTCONFIG_SAMBA4)
+	/* reaper: Spotlight RPC (mdssvc) off: no share enables Spotlight; closes CVE-2023-34966/34967/34968 */
+	fprintf(fp, "rpc_server:mdssvc = disabled\n");
+#endif
 	fprintf(fp, "host msdfs = no\n");		// ASUS add
 	fprintf(fp, "strict allocate = no\n");		// ASUS add
 //	fprintf(fp, "mangling method = hash2\n");	// ASUS add

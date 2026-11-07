@@ -76,6 +76,7 @@ static int _get_vpnc_state(const int vpnc_idx);
 int vpnc_update_resolvconf(const int unit);
 static int _set_network_routing_rule(const VPNC_ROUTE_CMD cmd, const int vpnc_idx);
 extern int _gen_vpnc_resolv_conf(const int vpnc_idx);
+int _gen_vpnc_resolv_conf_dev(const int vpnc_idx, const char *dev);
 
 int vpnc_pppstatus(const int unit)
 {
@@ -2595,8 +2596,24 @@ int write_vpn_fusion_mangle()
 
 int _gen_vpnc_resolv_conf(const int vpnc_idx)
 {
+	return _gen_vpnc_resolv_conf_dev(vpnc_idx, NULL);
+}
+
+/* 2026-10-30: dev = the tunnel these servers must be asked through
+ * ("server=10.9.0.1@tun13", dnsmasq binds the socket to it). An SDN network
+ * bound to a VPN client resolves through the router's own dnsmasq, whose
+ * queries leave from the router (iif lo); for OpenVPN nothing routes those
+ * into the tunnel (libovpn's "iif lo to <dns>" rule is #if 0, and only
+ * vpnc_up() - WireGuard - reaches _set_network_routing_rule()), and a
+ * destination rule could not tell two tunnels sharing a resolver address
+ * apart anyway. NULL, or a name that is not a plain interface name, writes
+ * the plain lines as before. */
+int _gen_vpnc_resolv_conf_dev(const int vpnc_idx, const char *dev)
+{
 	FILE *fp;
 	char resolv_file[128], vpnc_prefix[] = "vpncXXXXXX_", *vpnc_dns, *next, tmp[128];
+	int bind_dev = dev && dev[0] && strlen(dev) < IFNAMSIZ &&
+		strspn(dev, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == strlen(dev);
 
 	snprintf(resolv_file, sizeof(resolv_file), vpnc_resolv_path, vpnc_idx);
 	snprintf(vpnc_prefix, sizeof(vpnc_prefix), "vpnc%d_", vpnc_idx);
@@ -2613,7 +2630,10 @@ int _gen_vpnc_resolv_conf(const int vpnc_idx)
 	{
 		foreach (tmp, vpnc_dns, next)
 		{
-			fprintf(fp, "server=%s\n", tmp);
+			if (bind_dev)
+				fprintf(fp, "server=%s@%s\n", tmp, dev);
+			else
+				fprintf(fp, "server=%s\n", tmp);
 		}
 		fclose(fp);
 		chmod(resolv_file, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);

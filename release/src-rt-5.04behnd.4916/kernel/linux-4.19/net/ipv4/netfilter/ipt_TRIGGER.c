@@ -61,17 +61,18 @@ static DEFINE_RWLOCK(trigger_lock);
 #define DEBUGP(format, args...)
 #endif
 
+/* reaper (review 2026-11-03, E-6): the CALLER holds trigger_lock (read) from the lookup until it is done
+ * with the entry. The lock was dropped inside this macro, so the entry could be freed by its timer
+ * (trigger_timeout) while the packet path still used it. Entries are freed only under the write lock. */
 #define LIST_FIND(head, cmpfn, type, args...)		\
 ({							\
 	const struct list_head *__i, *__j = NULL;	\
 							\
-	read_lock_bh(&trigger_lock);			\
 	list_for_each(__i, (head))			\
 		if (cmpfn((const type)__i , ## args)) {	\
 			__j = __i;			\
 			break;				\
 		}					\
-	read_unlock_bh(&trigger_lock);			\
 	(type)__j;					\
 })
 
@@ -92,15 +93,9 @@ static void trigger_timer_refresh(struct ipt_trigger *trig)
 {
 	DEBUGP("%s: mport=%u-%u\n", __FUNCTION__, trig->ports.mport[0], trig->ports.mport[1]);
 	NF_CT_ASSERT(trig);
-	write_lock_bh(&trigger_lock);
-
-	/* Need del_timer for race avoidance (may already be dying). */
-	if (del_timer(&trig->timeout)) {
-		trig->timeout.expires = jiffies + (TRIGGER_TIMEOUT * HZ);
-		add_timer(&trig->timeout);
-	}
-
-	write_unlock_bh(&trigger_lock);
+	/* reaper (review 2026-11-03, E-6): called with trigger_lock held for read. Pushes the timeout back only
+	 * while it is pending - one already firing (the entry is dying) is left to finish, as before */
+	mod_timer_pending(&trig->timeout, jiffies + (TRIGGER_TIMEOUT * HZ));
 }
 
 static void __del_trigger(struct ipt_trigger *trig)
@@ -146,19 +141,102 @@ static void trigger_timeout(struct timer_list *t)
 
 static void trigger_flush(void)
 {
-	struct list_head *cur_item, *tmp_item;
+	struct ipt_trigger *trig, *tmp;
+	LIST_HEAD(dead);
 
 	DEBUGP("%s\n", __FUNCTION__);
+	/* reaper (review 2026-11-03, E-6): only an entry whose timer this cancels is ours to free - one whose
+	 * timer is already running stays on the list and trigger_timeout frees it (it freed the entry under
+	 * the running timer = double free). The conntrack sweep runs outside the lock. */
 	write_lock_bh(&trigger_lock);
-	list_for_each_safe(cur_item, tmp_item, &trigger_list) {
-		struct ipt_trigger *trig = (void *)cur_item;
-
-		DEBUGP("%s: list_for_each_safe(): %p.\n", __FUNCTION__, trig);
-		del_timer(&trig->timeout);
+	list_for_each_entry_safe(trig, tmp, &trigger_list, list)
+		if (del_timer(&trig->timeout))
+			list_move(&trig->list, &dead);
+	write_unlock_bh(&trigger_lock);
+	list_for_each_entry_safe(trig, tmp, &dead, list) {
 		nf_ct_iterate_cleanup_net(trig->net, ip_ct_kill_triggered, (void *)trig, 0, 0);
 		__del_trigger(trig);
 	}
+}
+
+/* reaper 2026-11-06 (review 2026-11-03 E-6 follow-up): a reference per "out" rule key (related protocol +
+ * port ranges). checkentry() used to empty the whole trigger list on every rule check - and the kernel
+ * re-checks every rule of a table on each replace, which every iptables command is, so any Warden,
+ * Gatekeeper or firewall change dropped every live port-trigger session. x_tables checks the NEW table
+ * before it destroys the OLD one, so a rule that stays keeps its count above zero and its sessions
+ * live; a removed rule drops to zero on the old table's destroy and only its entries are flushed (the
+ * reason the flush was kept: a removed trigger must not stay open). Process context only (mutex). */
+struct trig_rule {
+	struct list_head list;
+	u_int16_t proto;
+	struct ipt_trigger_ports ports;
+	unsigned int refs;
+};
+static LIST_HEAD(trig_rules);
+static DEFINE_MUTEX(trig_rules_mutex);
+
+static int trig_key_eq(u_int16_t proto, const struct ipt_trigger_ports *a, const struct ipt_trigger_ports *b, u_int16_t bproto)
+{
+	return proto == bproto && a->mport[0] == b->mport[0] && a->mport[1] == b->mport[1] &&
+	       a->rport[0] == b->rport[0] && a->rport[1] == b->rport[1];
+}
+
+/* free the live entries one removed rule created (same shape as trigger_flush) */
+static void trigger_flush_rule(u_int16_t proto, const struct ipt_trigger_ports *ports)
+{
+	struct ipt_trigger *trig, *tmp;
+	LIST_HEAD(dead);
+
+	write_lock_bh(&trigger_lock);
+	list_for_each_entry_safe(trig, tmp, &trigger_list, list)
+		if (trig_key_eq(trig->rproto, &trig->ports, ports, proto) && del_timer(&trig->timeout))
+			list_move(&trig->list, &dead);
 	write_unlock_bh(&trigger_lock);
+	list_for_each_entry_safe(trig, tmp, &dead, list) {
+		nf_ct_iterate_cleanup_net(trig->net, ip_ct_kill_triggered, (void *)trig, 0, 0);
+		__del_trigger(trig);
+	}
+}
+
+static int trig_rule_get(const struct ipt_trigger_info *info)
+{
+	struct trig_rule *r;
+
+	mutex_lock(&trig_rules_mutex);
+	list_for_each_entry(r, &trig_rules, list)
+		if (trig_key_eq(r->proto, &r->ports, &info->ports, info->proto)) {
+			r->refs++;
+			mutex_unlock(&trig_rules_mutex);
+			return 0;
+		}
+	r = kzalloc(sizeof(*r), GFP_KERNEL);
+	if (!r) {
+		mutex_unlock(&trig_rules_mutex);
+		return -ENOMEM;
+	}
+	r->proto = info->proto;
+	r->ports = info->ports;
+	r->refs = 1;
+	list_add(&r->list, &trig_rules);
+	mutex_unlock(&trig_rules_mutex);
+	return 0;
+}
+
+static void trig_rule_put(const struct ipt_trigger_info *info)
+{
+	struct trig_rule *r;
+
+	mutex_lock(&trig_rules_mutex);
+	list_for_each_entry(r, &trig_rules, list)
+		if (trig_key_eq(r->proto, &r->ports, &info->ports, info->proto)) {
+			if (--r->refs == 0) {
+				list_del(&r->list);
+				kfree(r);
+				trigger_flush_rule(info->proto, &info->ports);
+			}
+			break;
+		}
+	mutex_unlock(&trig_rules_mutex);
 }
 
 /*
@@ -190,6 +268,7 @@ static unsigned int trigger_out(struct sk_buff **pskb, const void *targinfo)
 	struct tcphdr *tcph = (void *)iph + (iph->ihl << 2);	/* Might be TCP, UDP */
 
 	/* Check if the trigger range has already existed in 'trigger_list'. */
+	read_lock_bh(&trigger_lock);	/* reaper (E-6): held while the entry is used */
 	trig = LIST_FIND(&trigger_list, trigger_out_matched, struct ipt_trigger *, iph->protocol, ntohs(tcph->dest), info);
 
 	if (trig != NULL) {
@@ -226,7 +305,9 @@ static unsigned int trigger_out(struct sk_buff **pskb, const void *targinfo)
 		 */
 		trig->srcip = iph->saddr;
 #endif
+		read_unlock_bh(&trigger_lock);
 	} else {
+		read_unlock_bh(&trigger_lock);
 		/* Create new trigger */
 		trig = (struct ipt_trigger *)kzalloc(sizeof(struct ipt_trigger), GFP_ATOMIC);
 		if (trig == NULL) {
@@ -280,16 +361,19 @@ static unsigned int trigger_in(struct sk_buff **pskb)
 	tcph = (void *)iph + (iph->ihl << 2);	/* Might be TCP, UDP */
 
 	/* Check if the trigger-ed range has already existed in 'trigger_list'. */
+	read_lock_bh(&trigger_lock);	/* reaper (E-6) */
 	trig = LIST_FIND(&trigger_list, trigger_in_matched, struct ipt_trigger *, iph->protocol, ntohs(tcph->dest));
 
 	if (trig != NULL) {
 		DEBUGP("Trigger In: from %pI4, destination port %u\n", &iph->saddr, ntohs(tcph->dest));
 		/* Yeah, it exists. We need to update(delay) the destroying timer. */
 		trigger_timer_refresh(trig);
+		read_unlock_bh(&trigger_lock);
 
 		return NF_ACCEPT;	/* Accept it, or the imcoming packet could be 
 					   dropped in the FORWARD chain */
 	}
+	read_unlock_bh(&trigger_lock);
 
 	return XT_CONTINUE;	/* Our job is the interception. */
 }
@@ -302,28 +386,37 @@ static unsigned int trigger_dnat(struct sk_buff **pskb, unsigned int hooknum)
 	struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 	struct nf_nat_range2 newrange;
+	u_int32_t srcip;
 
 	iph = ip_hdr(*pskb);
 	tcph = (void *)iph + (iph->ihl << 2);	/* Might be TCP, UDP */
 
 	NF_CT_ASSERT(hooknum == NF_INET_PRE_ROUTING);
+	/* reaper (review 2026-11-03, E-6): no conntrack entry (a rule outside the nat table) - nothing to map */
+	ct = nf_ct_get(*pskb, &ctinfo);
+	if (ct == NULL)
+		return XT_CONTINUE;
 	/* Check if the trigger-ed range has already existed in 'trigger_list'. */
+	read_lock_bh(&trigger_lock);	/* reaper (E-6): the entry is read and marked under the lock */
 	trig = LIST_FIND(&trigger_list, trigger_in_matched, struct ipt_trigger *, iph->protocol, ntohs(tcph->dest));
 
-	if (trig == NULL || trig->srcip == 0)
+	if (trig == NULL || trig->srcip == 0) {
+		read_unlock_bh(&trigger_lock);
 		return XT_CONTINUE;	/* We don't block any packet. */
+	}
 
 	trig->reply = 1;	/* Confirm there has been a reply connection. */
-	ct = nf_ct_get(*pskb, &ctinfo);
-	NF_CT_ASSERT(ct && (ctinfo == IP_CT_NEW));
+	srcip = trig->srcip;
+	read_unlock_bh(&trigger_lock);
+	NF_CT_ASSERT(ctinfo == IP_CT_NEW);
 
-	DEBUGP("Trigger DNAT: %pI4 ", &trig->srcip);
+	DEBUGP("Trigger DNAT: %pI4 ", &srcip);
 	nf_ct_dump_tuple_ip(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
 
 	/* Alter the destination of imcoming packet. */
 	newrange.flags       = NF_NAT_RANGE_MAP_IPS;
-	newrange.min_addr.ip = trig->srcip;
-	newrange.max_addr.ip = trig->srcip;
+	newrange.min_addr.ip = srcip;
+	newrange.max_addr.ip = srcip;
 
 	ct->status |= IPS_TRIGGER;
 
@@ -353,11 +446,13 @@ static unsigned int trigger_refresh(struct sk_buff **pskb)
 	iph = ip_hdr(*pskb);
 	tcph = (void *)iph + (iph->ihl << 2);	/* Might be TCP, UDP */
 
+	read_lock_bh(&trigger_lock);	/* reaper (E-6) */
 	trig = LIST_FIND(&trigger_list, trigger_refresh_matched, struct ipt_trigger *, iph->protocol, tcph->source);
 	if (trig != NULL) {
 		DEBUGP("Trigger Refresh: from %pI4, %u\n", &iph->saddr, ntohs(tcph->source));
 		trigger_timer_refresh(trig);
 	}
+	read_unlock_bh(&trigger_lock);
 
 	return XT_CONTINUE;
 }
@@ -415,10 +510,19 @@ static int checkentry(const struct xt_tgchk_param *par)
 		}
 	}
 
-	/* Empty the 'trigger_list' */
-	trigger_flush();
+	/* reaper 2026-11-06 (E-6): no whole-list flush here - see trig_rule_get() */
+	if (info->type == IPT_TRIGGER_OUT)
+		return trig_rule_get(info);
 
 	return 0;
+}
+
+static void destroy(const struct xt_tgdtor_param *par)
+{
+	const struct ipt_trigger_info *info = par->targinfo;
+
+	if (info->type == IPT_TRIGGER_OUT)
+		trig_rule_put(info);
 }
 
 static struct xt_target redirect_reg = {
@@ -427,6 +531,7 @@ static struct xt_target redirect_reg = {
 	.target = target,
 	.targetsize = sizeof(struct ipt_trigger_info),
 	.checkentry = checkentry,
+	.destroy = destroy,	/* reaper (E-6) */
 	.me = THIS_MODULE,
 };
 

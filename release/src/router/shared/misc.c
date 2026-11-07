@@ -6014,16 +6014,26 @@ int IPTV_ports_cnt(void)
 int isValidMacAddress(const char* mac) {
 	int i=0, s=0;
 
+	if (!mac)
+		return 0;
+
 	while (*mac) {
-		if (isxdigit(*mac))
+		if (isxdigit((unsigned char)*mac))
 			i++;
 		else if (*mac == ':' || *mac == '-') {
+			/* Reaper review 2026-10-28 (R-1): a separator out of place makes it no MAC. Stock broke out
+			 * of the loop and returned i == 12 && s == 0, so 12 hex digits, a separator and then anything
+			 * (AABBCCDDEEFF:"},{...) passed without the rest being read. */
 			if (i == 0 || i / 2 - 1 != s)
-				break;
+				return 0;
 			++s;
 		}
 		else
-			s = -1;
+			/* Reaper 2026-10-27: any other character makes it no MAC. Stock set s = -1 and went
+			 * on, so a separator after one hex digit (i / 2 - 1 == -1) put the count back and
+			 * A":A:BB:CC:DD:EE:FF passed - a quote or brace into the JSON events httpd writes
+			 * for cfg_server from re_mac / new_re_mac / target_bssid. */
+			return 0;
 		++mac;
 	}
 	return (i == 12 && (s == 5 || s == 0));

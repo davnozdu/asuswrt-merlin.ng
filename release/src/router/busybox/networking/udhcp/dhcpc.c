@@ -908,6 +908,12 @@ static NOINLINE int udhcp_recv_raw_packet(struct dhcp_packet *dhcp_pkt, int fd)
 
 	/* ignore any extra garbage bytes */
 	bytes = ntohs(packet.ip.tot_len);
+	/* reaper (CVE-2026-88833): a total length below the IP and UDP headers plus the fixed DHCP part wrapped
+	 * `bytes` (udp.len is compared against the wrapped value) and the memcpy at the end ran with a negative size */
+	if (bytes < (int)(sizeof(packet.ip) + sizeof(packet.udp) + offsetof(struct dhcp_packet, options))) {
+		log1("packet is too short, ignoring");
+		return -2;
+	}
 
 	/* make sure its the right packet for us, and that it passes sanity checks */
 	if (packet.ip.protocol != IPPROTO_UDP

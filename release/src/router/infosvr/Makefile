@@ -16,6 +16,8 @@
 include ../common.mak
 
 CFLAGS  += -I. -I$(TOP)/shared  -I$(SRCBASE)/include -Wall
+# review 2026-11-03 (F-4): position-independent, full RELRO and FORTIFY
+CFLAGS  += -Os -fPIE -D_FORTIFY_SOURCE=2
 ifeq ($(RTCONFIG_AMAS),y)
 CFLAGS += -I$(TOP)/openssl/include
 CFLAGS += -I$(TOP)/json-c
@@ -83,7 +85,7 @@ install: all
 
 
 infosvr: ./infosvr.o ./common.o ./packet.o ./storage.o
-	$(CC) -o $@ $^ $(LDFLAGS) $(CFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(CFLAGS) -pie -Wl,-z,relro,-z,now
 
 ifneq ($(wildcard ./prebuild/interface.o),)
 interface.o:

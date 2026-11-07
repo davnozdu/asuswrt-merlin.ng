@@ -424,6 +424,12 @@ static void client_work(AvahiWatch *watch, AVAHI_GCC_UNUSED int fd, AvahiWatchEv
         }
     }
 
+    /* reaper: a hung-up client with nothing left to read made the daemon spin (CVE-2021-3468) */
+    if (events & AVAHI_WATCH_HUP) {
+        client_free(c);
+        return;
+    }
+
     c->server->poll_api->watch_update(
         watch,
         (c->outbuf_length > 0 ? AVAHI_WATCH_OUT : 0) |

@@ -1603,7 +1603,7 @@ convert_fname (char *fname)
   const char *from_encoding = opt.encoding_remote;
   const char *to_encoding = opt.locale;
   iconv_t cd;
-  size_t len, done, inlen, outlen;
+  size_t len, inlen, outlen;
   char *s;
   const char *orig_fname;
 
@@ -1625,7 +1625,6 @@ convert_fname (char *fname)
   inlen = strlen (fname);
   len = outlen = inlen * 2;
   converted_fname = s = xmalloc (outlen + 1);
-  done = 0;
 
   for (;;)
     {
@@ -1633,7 +1632,7 @@ convert_fname (char *fname)
       if (iconv (cd, (ICONV_CONST char **) &fname, &inlen, &s, &outlen) == 0
           && iconv (cd, NULL, NULL, &s, &outlen) == 0)
         {
-          *(converted_fname + len - outlen - done) = '\0';
+          *s = '\0';
           iconv_close (cd);
           DEBUGP (("Converted file name '%s' (%s) -> '%s' (%s)\n",
                    orig_fname, from_encoding, converted_fname, to_encoding));
@@ -1656,10 +1655,17 @@ convert_fname (char *fname)
         }
       else if (errno == E2BIG) /* Output buffer full */
         {
-          done = len;
-          len = outlen = done + inlen * 2;
-          converted_fname = xrealloc (converted_fname, outlen + 1);
-          s = converted_fname + done;
+          size_t used = s - converted_fname;
+          size_t newlen = used + inlen * 2 + 1;
+
+          /* Ensure we actually grow the buffer */
+          if (newlen <= len)
+            newlen = len * 2;
+
+          converted_fname = xrealloc (converted_fname, newlen + 1);
+          len = newlen;
+          s = converted_fname + used;
+          outlen = len - used;
         }
       else /* Weird, we got an unspecified error */
         {

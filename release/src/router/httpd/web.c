@@ -9523,6 +9523,14 @@ finish:
 			}
 		}
 	}
+
+	if (ruleIdxArray)
+		json_object_put(ruleIdxArray);
+	if (statusArray)
+		json_object_put(statusArray);
+	if (timeArray)
+		json_object_put(timeArray);
+
 	return have_data;
 }
 #ifdef RTCONFIG_PERMISSION_MANAGEMENT
@@ -10720,8 +10728,6 @@ static int get_client_detail_info(struct json_object *clients, struct json_objec
 	if(amasReClientDetailList)
 		json_object_put(amasReClientDetailList);
 #endif
-	if(custom_attr_get)
-		json_object_put(custom_attr_get);
 	CLIENT_DPRINTF("get_client_detail_info finish\n");
 
 	return 0;
@@ -27088,12 +27094,15 @@ static void do_ModelProduct_png(char *url, FILE *stream)
     char lowercase_pid[32] = {0};
     char *p;
 
+    /* reaper 2026-10-27: bounded to the 32-byte buffer (odmpid is an nvram value of any length, and the
+       loop wrote past lowercase_pid for a long one); NUL-terminate the copy, not the source string.
+       Same bound as do_CoBrand_img() below. */
     p = odmpid;
-    for(i = 0; i < strlen(odmpid); i++){
-        lowercase_pid[i] = tolower(*p);
+    for(i = 0; i < (int)strlen(odmpid) && i < (int)sizeof(lowercase_pid) - 1; i++){
+        lowercase_pid[i] = tolower((unsigned char)*p);
         p++;
     }
-    *p = '\0';
+    lowercase_pid[i] = '\0';
 
     if(!strcmp(productid, "TUF-BE9400") || !strcmp(productid, "TUF-BE6500"))
         snprintf(default_image_name, sizeof(default_image_name), "Model_product_%s", productid);

@@ -1441,7 +1441,7 @@ tunnel_set_params(l2tp_tunnel *tunnel,
 
     if (len >= MAX_HOSTNAME) len = MAX_HOSTNAME-1;
     memcpy(tunnel->peer_hostname, val, len);
-    tunnel->peer_hostname[len+1] = 0;
+    tunnel->peer_hostname[len] = 0;	/* reaper: was [len+1], one byte past the array (CVE-2026-96891) */
     DBG(l2tp_db(DBG_TUNNEL, "%s: Peer host name is '%s'\n",
                            l2tp_debug_tunnel_to_str(tunnel), tunnel->peer_hostname));
 

@@ -428,6 +428,15 @@ SendContainer(struct upnphttp *h, const char *objectID, int itemStart, int itemC
 			while( item != NULL )
 			{
 				int reverse=0;
+				/* reaper (CVE-2023-47430): SortOrder comes from the TiVo request and each key appends up
+				 * to 12 bytes to order[96]/order2[96]; stop taking keys while room remains for one more
+				 * key plus the fixed tail ("TITLE DESC, DETAIL_ID DESC" = 26). */
+				if( strlen(order) + 12 + 27 > sizeof(order) ||
+				    strlen(order2) + 12 + 27 > sizeof(order2) )
+				{
+					DPRINTF(E_WARN, L_TIVO, "SortOrder too long, ignoring the rest\n");
+					break;
+				}
 				if( *item == '!' )
 				{
 					reverse = 1;

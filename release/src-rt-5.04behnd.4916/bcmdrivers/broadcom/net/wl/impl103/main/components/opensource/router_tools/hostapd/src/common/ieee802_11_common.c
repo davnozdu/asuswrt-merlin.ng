@@ -451,6 +451,11 @@ void ieee802_11_mlo_parse_ml_info(struct ml_info *mlsta_info,
 		return;
 	}
 
+	/* reaper (Broadcom MLO parser, no CVE): every length below comes from the association request.
+	 * The common info must hold each field its control word announces and fit in the element. */
+	if (multi_link_len < ML_MLCNTRL_SZ + ML_COMM_INFO_LEN_SZ)
+		return;
+
 	os_memcpy(&ml_ctrl, multi_link + offset, sizeof(ml_ctrl));
 	mlsta_info->ml_ctrl = ml_ctrl;
 	offset += ML_MLCNTRL_SZ;
@@ -458,6 +463,28 @@ void ieee802_11_mlo_parse_ml_info(struct ml_info *mlsta_info,
 	comm_info_len = *(multi_link + offset);
 	mlsta_info->comm_info_len = comm_info_len;
 	offset += ML_COMM_INFO_LEN_SZ;
+
+	{
+		size_t need = ML_COMM_INFO_LEN_SZ + ML_COMM_MLDADDR_SZ;
+
+		if (ml_ctrl & ML_MLCNTRL_PRESN_LINKID_MASK)
+			need += ML_COMM_LINKID_SZ;
+		if (ml_ctrl & ML_MLCNTRL_PRESN_BSSPARM_MASK)
+			need += ML_COMM_BSSPARM_SZ;
+		if (ml_ctrl & ML_MLCNTRL_PRESN_MSD_MASK)
+			need += ML_COMM_MSD_SZ;
+		if (ml_ctrl & ML_MLCNTRL_PRESN_EMLCAP_MASK)
+			need += ML_COMM_EMLCAP_SZ;
+		if (ml_ctrl & ML_MLCNTRL_PRESN_MLDCAP_MASK)
+			need += ML_COMM_MLDCAP_SZ;
+		if (ml_ctrl & ML_MLCNTRL_PRESN_MLDID_MASK)
+			need += ML_COMM_MLDID_SZ;
+		if (comm_info_len < need ||
+		    (size_t)ML_MLCNTRL_SZ + comm_info_len > multi_link_len) {
+			wpa_printf(MSG_DEBUG, "MLIE: common info length %u invalid", comm_info_len);
+			return;
+		}
+	}
 
 	os_memcpy(mlsta_info->mld_addr, multi_link + offset, ML_COMM_MLDADDR_SZ);
 	offset += ML_COMM_MLDADDR_SZ;
@@ -482,6 +509,10 @@ void ieee802_11_mlo_parse_ml_info(struct ml_info *mlsta_info,
 		os_memcpy(&mld_cap, multi_link + offset, ML_COMM_MLDCAP_SZ);
 		offset += ML_COMM_MLDCAP_SZ;
 		numlinks = (mld_cap & ML_MLDCAP_NUMLINKS_MASK) + 1;
+		/* reaper: the frame may announce up to 16 links; persta[] holds MAX_ML_NUM_LINKS (links other
+		 * than this one). mlo_ap_sta_freepersta() also loops to numlinks - 1, so store the clamp. */
+		if (numlinks > MAX_ML_NUM_LINKS + 1)
+			numlinks = MAX_ML_NUM_LINKS + 1;
 		mlsta_info->numlinks = numlinks;
 		mlsta_info->mld_cap = mld_cap;
 	}
@@ -538,8 +569,32 @@ void ieee802_11_mlo_parse_ml_info(struct ml_info *mlsta_info,
 					wpabuf_len(perstabuf));
 		}
 
+		/* reaper: a link without a per-STA profile subelement left perstabuf NULL, and a profile shorter
+		 * than the fields its control word announces was read past its end. */
+		if (!perstabuf || wpabuf_len(perstabuf) < ML_PERSTA_CNTL_SZ + ML_PERSTA_STAINFOLEN_SZ)
+			break;
 		perstaprof = (u8 *)wpabuf_head(perstabuf);
 		os_memcpy(&sta_cntrl, perstaprof, ML_PERSTA_CNTL_SZ);
+		{
+			size_t need = ML_PERSTA_CNTL_SZ + ML_PERSTA_STAINFOLEN_SZ;
+
+			if (sta_cntrl & ML_PERSTA_PRESN_STAMAC_MASK)
+				need += ML_PERSTA_STAMAC_SZ;
+			if (sta_cntrl & ML_PERSTA_PRESN_BCNITVL_MASK)
+				need += ML_PERSTA_BCNITVL_SZ;
+			if (sta_cntrl & ML_PERSTA_PRESN_TSFOFF_MASK)
+				need += ML_PERSTA_TSFOFF_SZ;
+			if (sta_cntrl & ML_PERSTA_PRESN_DTIM_MASK)
+				need += ML_PERSTA_DTIM_SZ;
+			if (sta_cntrl & ML_PERSTA_PRESN_NSTR_MASK)
+				need += ML_PERSTA_NSTR_SZ;
+			if (sta_cntrl & ML_PERSTA_PRESN_BSSPARM_MASK)
+				need += ML_PERSTA_BSSPARM_SZ;
+			if (wpabuf_len(perstabuf) < need) {
+				wpa_printf(MSG_DEBUG, "MLIE: per-STA profile %d too short", i);
+				break;
+			}
+		}
 		(mlsta_info->persta[i]).sta_cntrl = sta_cntrl;
 		sta_linkid = sta_cntrl & ML_PERSTA_LINKID_MASK;
 		perstaprof += ML_PERSTA_CNTL_SZ;

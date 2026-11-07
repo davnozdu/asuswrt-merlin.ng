@@ -1030,3 +1030,22 @@ void amvpn_set_kilswitch_rules_all() {
 		amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, i, NULL);
 	}
 }
+
+/* Re-apply VPN Director policies after add_multi_routes() flushes ip rules.
+ * Caller holds VPNROUTING_LOCK. */
+void amvpn_set_all_routing_rules(void)
+{
+	int i;
+
+	amvpn_set_kilswitch_rules_all();
+	amvpn_set_wan_routing_rules();
+#ifdef RTCONFIG_WIREGUARD
+	for (i = WG_CLIENT_MAX; i > 0; i--)
+	    amvpn_set_routing_rules(i, VPNDIR_PROTO_WIREGUARD);
+#if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_BCM_502L07P2) || defined(RTCONFIG_HND_ROUTER_AX_675X) || defined(RTCONFIG_HND_ROUTER_BE_4916)
+	amvpn_refresh_wg_bypass_rules();
+#endif
+#endif
+	for (i = OVPN_CLIENT_MAX; i > 0; i--)
+	    amvpn_set_routing_rules(i, VPNDIR_PROTO_OPENVPN);
+}

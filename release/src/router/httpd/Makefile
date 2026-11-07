@@ -2,6 +2,8 @@ include ../common.mak
 
 CFLAGS += -Os -Wall $(EXTRACFLAGS)
 CFLAGS += $(PRIVATE_EXTRACFLAGS)
+# review 2026-11-03 (F-4): position-independent, full RELRO and FORTIFY - the closed objects linked in are -fPIC
+CFLAGS += -fPIE -D_FORTIFY_SOURCE=2
 CFLAGS += -I$(SRCBASE) -I.
 ifeq ($(RTCONFIG_BCM7),y)
 CFLAGS += -I$(SRCBASE)/../../dhd/src/wl/exe/
@@ -425,7 +427,7 @@ all: httpd #test_apps
 
 httpd: $(OBJS)
 	@echo " [httpd] CC $@"
-	$(CC) -o $@ $(OBJS) $(LIBS) $(EXTRALDFLAGS)
+	$(CC) -o $@ $(OBJS) $(LIBS) $(EXTRALDFLAGS) -pie -Wl,-z,relro,-z,now
 
 	$(SIZECHECK)
 	$(CPTMP)

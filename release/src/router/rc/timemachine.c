@@ -62,7 +62,7 @@ int generate_afp_config(char *mpname)
 
 	/* Set [Global] configuration */
 	fprintf(fp, "[Global]\n");
-	fprintf(fp, "uam list = uams_dhx.so,uams_dhx2.so\n");
+	fprintf(fp, "uam list = uams_dhx2.so\n");	/* reaper: DHX1 dropped (CVE-2026-44053); every Time Machine Mac speaks DHX2 */
 	fprintf(fp, "save password = no\n");
 	fprintf(fp, "vol dbpath = %s/%s\n", mpname, CNID_DIR_NAME);
 	//fprintf(fp, "server quantum = 32000\n");
@@ -170,7 +170,7 @@ int generate_avahi_config()
 
 	/* Set [wide-area] configuration */
 	fprintf(fp, "\n[wide-area]\n");
-	fprintf(fp, "enable-wide-area=yes\n");
+	fprintf(fp, "enable-wide-area=no\n");	/* reaper: .local only; unicast DNS-SD unused (CVE-2024-52615/52616) */
 
 	/* Set [rlimits] configuration */
 	fprintf(fp, "\n[rlimits]\n");

@@ -623,9 +623,18 @@ ftp_pasv (int csock, ip_address *addr, int *port)
   int nwritten, i;
   uerr_t err;
   unsigned char tmp[6];
+  ip_address peer_addr;
 
   assert (addr != NULL);
   assert (port != NULL);
+
+  /* Remember who we are talking to on the control connection, so that
+     the address returned in the PASV response can be checked below.
+     Accepting an arbitrary server-supplied address would let a
+     malicious FTP server redirect our data connection to any host of
+     its choosing (SSRF).  */
+  if (!socket_ip_address (csock, &peer_addr, ENDPOINT_PEER))
+    return FTPINVPASV;
 
   xzero (*addr);
 
@@ -677,6 +686,16 @@ ftp_pasv (int csock, ip_address *addr, int *port)
   memcpy (IP_INADDR_DATA (addr), tmp, 4);
   *port = ((tmp[4] << 8) & 0xff00) + tmp[5];
 
+  /* Reject the response if the advertised address does not match the
+     control connection's peer.  */
+  if (peer_addr.family != AF_INET
+      || memcmp (IP_INADDR_DATA (addr), IP_INADDR_DATA (&peer_addr), 4) != 0)
+    {
+      xzero (*addr);
+      *port = 0;
+      return FTPINVPASV;
+    }
+
   return FTPOK;
 }
 
@@ -692,9 +711,18 @@ ftp_lpsv (int csock, ip_address *addr, int *port)
   uerr_t err;
   unsigned char tmp[16];
   unsigned char tmpprt[2];
+  ip_address peer_addr;
 
   assert (addr != NULL);
   assert (port != NULL);
+
+  /* Remember who we are talking to on the control connection, so that
+     the address returned in the LPSV response can be checked below.
+     Accepting an arbitrary server-supplied address would let a
+     malicious FTP server redirect our data connection to any host of
+     its choosing (SSRF).  */
+  if (!socket_ip_address (csock, &peer_addr, ENDPOINT_PEER))
+    return FTPINVPASV;
 
   xzero (*addr);
 
@@ -840,6 +868,18 @@ ftp_lpsv (int csock, ip_address *addr, int *port)
       DEBUGP (("tmpprt[0] is: %d\n", tmpprt[0]));
       DEBUGP (("tmpprt[1] is: %d\n", tmpprt[1]));
       DEBUGP (("*port is: %d\n", *port));
+    }
+
+  /* Reject the response if the advertised address does not match the
+     control connection's peer.  */
+  if (peer_addr.family != addr->family
+      || memcmp (IP_INADDR_DATA (addr), IP_INADDR_DATA (&peer_addr),
+                 af == 4 ? 4 : 16) != 0)
+    {
+      xzero (*addr);
+      *port = 0;
+      xfree (respline);
+      return FTPINVPASV;
     }
 
   xfree (respline);

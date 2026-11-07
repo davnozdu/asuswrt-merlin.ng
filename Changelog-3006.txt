@@ -1,6 +1,32 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav29 (07-Nov-2026)
+ - UPDATED: OpenVPN 2.7.9 and CA bundle distrust of emSign ECC Root CA G3
+         (from current Asuswrt-Merlin).
+ - FIXED: HTTPS preconnections no longer stall the single-threaded WebUI;
+         cleaned up Parental Controls JSON leaks and a possible double free.
+ - FIXED: VPN Director restores routing policies after a Dual WAN load-
+         balance failover; the CLI route rebuild now restores killswitches
+         before returning. Guest Network Pro DNS follows its OpenVPN tunnel.
+ - FIXED: TCP DNS from SDN networks, UDP NAT timeout restoration and wanduck
+         listeners inherited by child processes.
+ - SECURITY: bounds checks in the Broadcom hostapd multi-link parser and
+         udhcpc, stricter MAC validation and a bounded product-icon copy.
+ - SECURITY: selected 4.19 kernel fixes for IP-options lifetime, WireGuard
+         handshakes, socket timestamp locking, IGMP, SCSI sg, file locks,
+         IPv6 reject headers, fw classifier and HFSC. Port-trigger lookups
+         keep entries alive and unchanged rules retain active sessions.
+ - SECURITY: selected dnsmasq, wget, iperf3, minidlna, libevent, rp-l2tp and
+         avahi fixes from AM-Reaper's 102.8 line. Corrected the imported wget
+         HTML-entity allocation and retained 64-bit HTTP range parsing.
+ - HARDENED: PIE/RELRO for httpd, infosvr, dnsmasq and rc; FORTIFY where
+         appropriate. Added native ASan/UBSan regression cases for the
+         adapted MAC, wget and VPN-routing paths.
+ - UNCHANGED: the working GT-BE98 bootloader and dav28 driver/radio-firmware
+         set. Gnuton beta2 only adds RT-BE82M support; its GT-BE98 driver
+         and radio-firmware trees are unchanged from beta1.
+
 3006.102.8_beta4-dav28 (06-Nov-2026)
  - UPDATED: GT-BE98 Wi-Fi, Ethernet, switch and RDPA prebuilts from
          ASUS GPL 102_40585, as imported by Gnuton. wl.o and BCM6726

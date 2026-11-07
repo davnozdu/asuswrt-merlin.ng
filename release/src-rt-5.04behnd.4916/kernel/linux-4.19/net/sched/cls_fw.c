@@ -277,7 +277,8 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 			return -ENOBUFS;
 
 		fnew->id = f->id;
-		fnew->res = f->res;
+		/* reaper: CVE-2023-4207 (upstream 76e42ae83199) - tcf_result is no longer copied on update:
+		 * the old filter's class binding is released with it (use-after-free) */
 #ifdef CONFIG_NET_CLS_IND
 		fnew->ifindex = f->ifindex;
 #endif /* CONFIG_NET_CLS_IND */

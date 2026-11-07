@@ -31,6 +31,9 @@
 #if 0
 void _ovpn_update_routing_rules(int add_cmd, const int unit);
 #endif
+#ifdef RTCONFIG_MULTILAN_CFG
+extern int _gen_vpnc_resolv_conf_dev(const int vpnc_idx, const char *dev);	/* vpnc_fusion.c */
+#endif
 
 
 int ovpn_up_main(int argc, char **argv) {
@@ -53,7 +56,10 @@ int ovpn_up_main(int argc, char **argv) {
 		// Set vpnc%d_dns nvram
 		vpnc_ovpn_set_dns(unit);
 		// Create vpnc%d_resolv config file
-		_gen_vpnc_resolv_conf(vpnc_idx);
+		/* 2026-10-30: bound to this client's tunnel (server=<dns>@tun1N) -
+		 * the bound SDN's dnsmasq asks from the router itself and nothing
+		 * else sends that into the tunnel (see _gen_vpnc_resolv_conf_dev) */
+		_gen_vpnc_resolv_conf_dev(vpnc_idx, safe_getenv("dev"));
 #endif
 		update_resolvconf();
 

@@ -1423,6 +1423,18 @@ get_parameters(struct iperf_test *test)
 	if ((j_p = cJSON_GetObjectItem(j, "no_fq_socket_pacing")) != NULL)
 	    iperf_set_no_fq_socket_pacing(test, 1);
 	
+	/* reaper: the server took these from the client unchecked (CVE-2026-71217); same limits the client enforces */
+	if (test->num_streams < 1 || test->num_streams > MAX_STREAMS) {
+	    i_errno = IENUMSTREAMS;
+	    r = -1;
+	} else if (test->settings->blksize < 0 || test->settings->blksize > MAX_BLOCKSIZE ||
+		   (test->protocol->id == Pudp && test->settings->blksize > MAX_UDP_BLOCKSIZE)) {
+	    i_errno = test->protocol->id == Pudp ? IEUDPBLOCKSIZE : IEBLOCKSIZE;
+	    r = -1;
+	} else if (test->settings->socket_bufsize < 0 || test->settings->socket_bufsize > MAX_TCP_BUFFER) {
+	    i_errno = IEBUFSIZE;
+	    r = -1;
+	}
 	if (test->sender && test->protocol->id == Ptcp && has_tcpinfo_retransmits())
 	    test->sender_has_retransmits = 1;
 	cJSON_Delete(j);
@@ -1687,6 +1699,11 @@ JSON_read(int fd)
      */
     if (Nread(fd, (char*) &nsize, sizeof(nsize), Ptcp) >= 0) {
 	hsize = ntohl(nsize);
+	/* reaper (CVE-2023-38403, CVE-2026-71218): the length is the peer's; 0xffffffff made the
+	 * calloc(hsize+1) below wrap to 0 bytes and the read overflow it. Bound it as iperf 3.14 does
+	 * (its limit is 8 KiB for parameters; results with many streams run larger, so 1 MiB here). */
+	if (hsize == 0 || hsize > 1024 * 1024)
+	    return NULL;
 	/* Allocate a buffer to hold the JSON */
 	str = (char *) calloc(sizeof(char), hsize+1);	/* +1 for trailing null */
 	if (str != NULL) {

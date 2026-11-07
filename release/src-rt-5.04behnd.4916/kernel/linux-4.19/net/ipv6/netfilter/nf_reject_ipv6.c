@@ -95,7 +95,10 @@ void nf_reject_ip6_tcphdr_put(struct sk_buff *nskb,
 	int needs_ack;
 
 	skb_reset_transport_header(nskb);
-	tcph = skb_put(nskb, sizeof(struct tcphdr));
+	/* reaper (review 2026-11-03, E-5): CVE-2024-47685, upstream "netfilter: nf_reject_ipv6:
+	 * fix nf_reject_ip6_tcphdr_put()" - zeroed, or the reserved bits of the RST header carry
+	 * kernel memory to the peer */
+	tcph = skb_put_zero(nskb, sizeof(struct tcphdr));
 	/* Truncate to length (no data) */
 	tcph->doff = sizeof(struct tcphdr)/4;
 	tcph->source = oth->dest;

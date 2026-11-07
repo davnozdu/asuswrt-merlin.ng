@@ -140,6 +140,9 @@ int main (int argc, char **argv)
       /* one char flag per possible RR in answer section (may get extended). */
       daemon->rr_status_sz = 64;
       daemon->rr_status = safe_malloc(sizeof(*daemon->rr_status) * daemon->rr_status_sz);
+      /* Increase TCP process slots by half, and reserve the extra for validation-to-tcp use only. */
+      daemon->dnssec_tcp_slot_reserved = daemon->max_procs/2;
+      daemon->max_procs += daemon->dnssec_tcp_slot_reserved;
     }
 #endif
   
@@ -427,6 +430,7 @@ int main (int argc, char **argv)
 
       daemon->tcp_pids = safe_malloc(daemon->max_procs*sizeof(pid_t));
       daemon->tcp_pipes = safe_malloc(daemon->max_procs*sizeof(int));
+      daemon->tcp_type = safe_malloc(daemon->max_procs);
 
       for (i = 0; i < daemon->max_procs; i++)
 	daemon->tcp_pipes[i] = -1;
@@ -559,6 +563,15 @@ int main (int argc, char **argv)
   capget(hdr, data); /* Get current values, for verification */
 
   have_cap_chown = data->permitted & (1 << CAP_CHOWN);
+
+  /* Reaper 2026-10-30: a servers-file is read only after the privileges are
+     dropped, and it may name an interface (server=10.9.0.1@tun13 for an SDN
+     network bound to a VPN client), so the loop over daemon->servers above
+     cannot see it. Keep CAP_NET_RAW for such an instance when the process
+     has it (started as root, as on the router); an unprivileged start runs
+     as before instead of refusing. An instance doing DHCP keeps it already. */
+  if (daemon->servers_file && (data->permitted & (1 << CAP_NET_RAW)))
+    need_cap_net_raw = 1;
 
   if (need_cap_net_admin && !(data->permitted & (1 << CAP_NET_ADMIN)))
     fail = "NET_ADMIN";
@@ -1652,7 +1665,11 @@ static void async_event(int pipe, time_t now)
 		  
 		  /* tcp_pipes == -1 && tcp_pids == 0 required to free slot */
 		  if (daemon->tcp_pipes[i] == -1)
-		    daemon->metrics[METRIC_TCP_CONNECTIONS]--;
+		    {
+		      if (daemon->tcp_type[i])
+			 daemon->dnssec_tcp_slot_reserved++;
+		      daemon->metrics[METRIC_TCP_CONNECTIONS]--;
+		    }
 		}
 	break;
 	
@@ -1896,7 +1913,7 @@ static void set_dns_listeners(void)
   struct serverfd *serverfdp;
   struct listener *listener;
   struct randfd_list *rfl;
-  int i;
+  int i, j;
   
   for (serverfdp = daemon->sfds; serverfdp; serverfdp = serverfdp->next)
     poll_listen(serverfdp->fd, POLLIN);
@@ -1910,8 +1927,8 @@ static void set_dns_listeners(void)
     poll_listen(rfl->rfd->fd, POLLIN);
   
   /* check to see if we have free tcp process slots. */
-  for (i = daemon->max_procs - 1; i >= 0; i--)
-    if (daemon->tcp_pids[i] == 0 && daemon->tcp_pipes[i] == -1)
+  for (j = 0, i = daemon->max_procs - 1; i >= 0; i--)
+    if (daemon->tcp_pids[i] == 0 && daemon->tcp_pipes[i] == -1 && ++j > daemon->dnssec_tcp_slot_reserved)
       break;
 
   for (listener = daemon->listeners; listener; listener = listener->next)
@@ -1938,7 +1955,7 @@ static void check_dns_listeners(time_t now)
   struct serverfd *serverfdp;
   struct listener *listener;
   struct randfd_list *rfl;
-  int i;
+  int i, j;
   
   /* Note that handling events here can create or destroy fds and
      render the result of the last poll() call invalid. Once
@@ -1963,7 +1980,11 @@ static void check_dns_listeners(time_t now)
 	      daemon->tcp_pipes[i] = -1;	
 	      /* tcp_pipes == -1 && tcp_pids == 0 required to free slot */
 	      if (daemon->tcp_pids[i] == 0)
-		daemon->metrics[METRIC_TCP_CONNECTIONS]--;
+		{
+		  daemon->metrics[METRIC_TCP_CONNECTIONS]--;
+		  if (daemon->tcp_type[i])
+		    daemon->dnssec_tcp_slot_reserved++;
+		}
 	    }
 	  return;
 	}
@@ -2003,8 +2024,8 @@ static void check_dns_listeners(time_t now)
      at least one a poll() time, that we still do.
      There may be more waiting connections after
      poll() returns then free process slots. */
-  for (i = daemon->max_procs - 1; i >= 0; i--)
-    if (daemon->tcp_pids[i] == 0 && daemon->tcp_pipes[i] == -1)
+  for (j = 0,i = daemon->max_procs - 1; i >= 0; i--)
+    if (daemon->tcp_pids[i] == 0 && daemon->tcp_pipes[i] == -1 && ++j > daemon->dnssec_tcp_slot_reserved)
       break;
 
   if (i >= 0)
@@ -2167,6 +2188,7 @@ static void do_tcp_connection(struct listener *listener, time_t now, int slot)
 
 	  daemon->tcp_pids[slot] = p;
 	  daemon->tcp_pipes[slot] = pipefd[0];
+	  daemon->tcp_type[slot] = 0;
 	  daemon->metrics[METRIC_TCP_CONNECTIONS]++;
 	  if (daemon->metrics[METRIC_TCP_CONNECTIONS] > daemon->max_procs_used)
 	    daemon->max_procs_used = daemon->metrics[METRIC_TCP_CONNECTIONS];
@@ -2288,6 +2310,8 @@ int swap_to_tcp(struct frec *forward, time_t now, int status, struct dns_header 
 	  /* i holds index of free slot */
 	  daemon->tcp_pids[i] = p;
 	  daemon->tcp_pipes[i] = pipefd[0];
+	  daemon->tcp_type[i] = 1;
+	  daemon->dnssec_tcp_slot_reserved--;
 	  daemon->metrics[METRIC_TCP_CONNECTIONS]++;
 	  if (daemon->metrics[METRIC_TCP_CONNECTIONS] > daemon->max_procs_used)
 	    daemon->max_procs_used = daemon->metrics[METRIC_TCP_CONNECTIONS];

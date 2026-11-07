@@ -1634,7 +1634,11 @@ dnsname_to_labels(u8 *const buf, size_t buf_len, off_t j,
 	/* the labels must be terminated by a 0. */
 	/* It's possible that the name ended in a . */
 	/* in which case the zero is already there */
-	if (!j || buf[j-1]) buf[j++] = 0;
+	if (!j || buf[j-1]) {
+		if (j + 1 > (off_t)buf_len)	/* reaper: bound the terminator too (CVE-2026-63387) */
+			goto overflow;
+		buf[j++] = 0;
+	}
 	return j;
  overflow:
 	return (-2);

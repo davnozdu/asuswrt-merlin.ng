@@ -753,10 +753,14 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 
 	/* Success! Copy everything to peer */
 	down_write(&handshake->lock);
-	/* It's important to check that the state is still the same, while we
-	 * have an exclusive lock.
+	/* It's important to check that the state is still the same, and that
+	 * the ephemeral key is still the one of the initiation this response
+	 * answers, while we have an exclusive lock (reaper: CVE-2026-99059,
+	 * upstream d0305f8d9002).
 	 */
-	if (handshake->state != state) {
+	if (handshake->state != state ||
+	    crypto_memneq(handshake->ephemeral_private, ephemeral_private,
+			  NOISE_PUBLIC_KEY_LEN)) {
 		up_write(&handshake->lock);
 		goto fail;
 	}
