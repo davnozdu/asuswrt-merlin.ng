@@ -1,6 +1,18 @@
 Asuswrt-Merlin 3006.xxx Changelog
 =================================
 
+3006.102.8_beta4-dav30 (10-Nov-2026)
+ - FIXED: 2.5G WAN/LAN port: the rtl8372 switch driver from GPL 102_40585
+         (dav28) expects encoded ioctl commands, so every /dev/rtkswitch
+         call failed with "Inappropriate ioctl for device". VLAN 4094 for
+         the 2.5G WAN was never programmed and port status/speed/counters
+         for the Realtek ports were missing (from Gnuton beta3).
+ - FIXED: Auto-WAN no longer overrides an explicitly selected 2.5G WAN
+         port at boot (from Gnuton beta3).
+ - CHANGED: GT-BE98 profile now says NFS=n, matching what the images have
+         always contained; repeated builds in the same tree no longer fail
+         in busybox on rpc/rpc.h (from Gnuton beta3).
+
 3006.102.8_beta4-dav29 (07-Nov-2026)
  - UPDATED: OpenVPN 2.7.9 and CA bundle distrust of emSign ECC Root CA G3
          (from current Asuswrt-Merlin).
